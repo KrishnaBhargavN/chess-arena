@@ -1,19 +1,21 @@
-export const Navbar = () => {
+import React from "react";
+import { Link } from "react-router-dom";
+const Navbar: React.FC = () => {
   return (
     <nav className="navbar">
-      <div className="nav-brand">
+      <Link to="/" className="nav-brand">
         ♞ <span>Chess</span>Arena
-      </div>
+      </Link>
+
       <div className="nav-links">
-        <a href="#play" className="nav-item">
+        <Link to="/play" className="nav-item">
           Play
-        </a>
-        <a href="#puzzles" className="nav-item">
-          Puzzles
-        </a>
+        </Link>
         <button className="btn btn-login">Log In</button>
         <button className="btn btn-signup">Sign Up</button>
       </div>
     </nav>
   );
 };
+
+export default Navbar;
