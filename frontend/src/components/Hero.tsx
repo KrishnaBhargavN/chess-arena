@@ -1,0 +1,16 @@
+export const Hero = () => {
+  return (
+    <header className="hero">
+      <h1>
+        Play Chess Online <br /> on the #1 Site!
+      </h1>
+      <p>
+        Challenge players from around the world, solve tactics, and improve your
+        game today. No downloads required.
+      </p>
+      <button className="btn btn-play">Play Now</button>
+    </header>
+  );
+};
+
+export default Hero;
