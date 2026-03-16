@@ -1,7 +1,7 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
 
-const Hero: React.FC = () => {
+const Home: React.FC = () => {
   const navigate = useNavigate();
 
   return (
@@ -20,4 +20,4 @@ const Hero: React.FC = () => {
   );
 };
 
-export default Hero;
+export default Home;
