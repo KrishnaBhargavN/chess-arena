@@ -1,6 +1,7 @@
 package game
 
 import (
+	"fmt"
 	"sync"
 	"time"
 
@@ -9,15 +10,15 @@ import (
 )
 
 type Session struct {
-	mu sync.Mutex
-	game *chess.Game
+	mu         sync.Mutex
+	game       *chess.Game
 	initialFEN string
 }
 
 func NewSession() *Session {
 	g := chess.NewGame()
 	return &Session{
-		game: g,
+		game:       g,
 		initialFEN: g.Position().String(),
 	}
 }
@@ -42,11 +43,11 @@ func (s *Session) Moves() []models.MoveRecord {
 		not := chess.AlgebraicNotation{}
 		san := not.Encode(pos, m)
 		rec := models.MoveRecord{
-			Ply: i,
-			SAN: san,
-			UCI: m.String(),
-			From: m.S1().String(),
-			To: m.S2().String(),
+			Ply:       i,
+			SAN:       san,
+			UCI:       m.String(),
+			From:      m.S1().String(),
+			To:        m.S2().String(),
 			Timestamp: time.Now(),
 		}
 		out = append(out, rec)
@@ -57,25 +58,26 @@ func (s *Session) Moves() []models.MoveRecord {
 func (s *Session) ApplyMove(moveStr string, by string) (models.MoveRecord, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	
-	beforePos := s.game.Position()
 
+	beforePos := s.game.Position()
+	fmt.Println("apply move")
 	if err := s.game.MoveStr(moveStr); err != nil {
+		fmt.Println("error with move")
 		return models.MoveRecord{}, err
 	}
 
 	moves := s.game.Moves()
-	last := moves[len(moves) - 1]
+	last := moves[len(moves)-1]
 	not := chess.AlgebraicNotation{}
 	san := not.Encode(beforePos, last)
 
 	rec := models.MoveRecord{
-		Ply: len(moves) - 1,
-		SAN: san,
-		UCI: last.String(),
-		From: last.S1().String(),
-		To: last.S2().String(),
-		By: by,
+		Ply:       len(moves) - 1,
+		SAN:       san,
+		UCI:       last.String(),
+		From:      last.S1().String(),
+		To:        last.S2().String(),
+		By:        by,
 		Timestamp: time.Now(),
 	}
 

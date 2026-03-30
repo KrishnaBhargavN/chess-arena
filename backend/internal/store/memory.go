@@ -18,15 +18,15 @@ type Store interface {
 }
 
 type MemoryStore struct {
-	mu sync.RWMutex
+	mu       sync.RWMutex
 	sessions map[string]*game.Session
-	status map[string]string
+	status   map[string]string
 }
 
 func NewMemoryStore() *MemoryStore {
 	return &MemoryStore{
 		sessions: make(map[string]*game.Session),
-		status: make(map[string]string),
+		status:   make(map[string]string),
 	}
 }
 
@@ -39,10 +39,10 @@ func (s *MemoryStore) CreateGame() (models.Game, error) {
 	s.mu.Unlock()
 
 	return models.Game{
-		ID: id,
-		Status: "waiting",
+		ID:         id,
+		Status:     "waiting",
 		CurrentFEN: sess.FEN(),
-		Moves: []models.MoveRecord{},
+		Moves:      []models.MoveRecord{},
 	}, nil
 }
 
@@ -57,10 +57,10 @@ func (s *MemoryStore) GetGame(id string) (models.Game, error) {
 	}
 
 	return models.Game{
-		ID: id,
-		Status: st,
+		ID:         id,
+		Status:     st,
 		CurrentFEN: sess.FEN(),
-		Moves: sess.Moves(),
+		Moves:      sess.Moves(),
 	}, nil
 }
 
@@ -72,7 +72,6 @@ func (s *MemoryStore) ApplyMove(gameID, moveStr, by string) (models.MoveRecord, 
 	if !ok {
 		return models.MoveRecord{}, ErrorNotFound
 	}
-
 	rec, err := sess.ApplyMove(moveStr, by)
 	if err != nil {
 		return models.MoveRecord{}, err
@@ -83,6 +82,6 @@ func (s *MemoryStore) ApplyMove(gameID, moveStr, by string) (models.MoveRecord, 
 		s.status[gameID] = "playing"
 		s.mu.Unlock()
 	}
-	
+
 	return rec, nil
 }

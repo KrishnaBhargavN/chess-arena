@@ -9,28 +9,45 @@ import (
 	"strings"
 	"time"
 
+	"krishna.com/go-chess-backend/internal/game"
 	"krishna.com/go-chess-backend/internal/handlers"
+	"krishna.com/go-chess-backend/internal/matchmaking"
 	"krishna.com/go-chess-backend/internal/store"
+	"krishna.com/go-chess-backend/internal/ws"
 )
 
 type Game struct {
-	ID string `json:"id"`
+	ID     string `json:"id"`
 	Status string `json:"status"`
 }
 
-var games = make(map[string]Game)
+func corsMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 
+		w.Header().Set("Access-Control-Allow-Origin", "http://127.0.0.1:5173")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
 
+		// Handle preflight request
+		if r.Method == http.MethodOptions {
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
+}
 
 func main() {
 	logger := log.New(os.Stdout, "", log.LstdFlags)
-
 	st := store.NewMemoryStore()
-	api := handlers.NewApi(st, logger)
-	
+	q := matchmaking.NewQueue()
+	hub := ws.NewHub()
+	manager := game.NewGameManager()
+
+	api := handlers.NewApi(st, logger, q, hub, manager)
 	mux := http.NewServeMux()
 	mux.HandleFunc("/games", api.CreateGame)
-	mux.HandleFunc("/games/",  func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/games/", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodGet {
 			api.GetGame(w, r)
 			return
@@ -41,13 +58,17 @@ func main() {
 		}
 		http.Error(w, "not found", http.StatusNotFound)
 	})
-	
+	mux.HandleFunc("/matchmaking/join", api.JoinMatchMaking)
+	mux.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
+		ws.ServeWS(hub, w, r, st, manager)
+	})
+
 	srv := &http.Server{
-		Addr: ":8080",
-		Handler: mux,
-		ReadTimeout: 5 * time.Second,
+		Addr:         ":8080",
+		Handler:      corsMiddleware(mux),
+		ReadTimeout:  5 * time.Second,
 		WriteTimeout: 10 * time.Second,
-		IdleTimeout: 60 * time.Second,
+		IdleTimeout:  60 * time.Second,
 	}
 
 	go func() {
@@ -61,8 +82,8 @@ func main() {
 	signal.Notify(stop, os.Interrupt)
 	<-stop
 	logger.Println("shutting down...")
-	
-	ctx, cancel := context.WithTimeout(context.Background(), 5 * time.Second)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 
 	defer cancel()
 	if err := srv.Shutdown(ctx); err != nil {

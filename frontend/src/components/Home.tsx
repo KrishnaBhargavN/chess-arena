@@ -13,7 +13,7 @@ const Home: React.FC = () => {
         Challenge players from around the world, solve tactics, and improve your
         game today. No downloads required.
       </p>
-      <button className="btn btn-play" onClick={() => navigate("/play")}>
+      <button className="btn btn-play" onClick={() => navigate("/matchmaking")}>
         Play Now
       </button>
     </header>

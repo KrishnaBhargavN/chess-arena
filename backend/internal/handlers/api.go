@@ -6,17 +6,23 @@ import (
 	"net/http"
 	"strings"
 
+	"krishna.com/go-chess-backend/internal/game"
+	"krishna.com/go-chess-backend/internal/matchmaking"
 	"krishna.com/go-chess-backend/internal/models"
 	"krishna.com/go-chess-backend/internal/store"
+	"krishna.com/go-chess-backend/internal/ws"
 )
 
 type API struct {
-	Store store.Store
-	Logger *log.Logger
+	Store   store.Store
+	Logger  *log.Logger
+	Queue   *matchmaking.Queue
+	Hub     *ws.Hub
+	Manager *game.GameManager
 }
 
-func NewApi(s store.Store, l *log.Logger) *API {
-	return &API{Store: s, Logger: l}
+func NewApi(s store.Store, l *log.Logger, q *matchmaking.Queue, hub *ws.Hub, manager *game.GameManager) *API {
+	return &API{Store: s, Logger: l, Queue: q, Hub: hub, Manager: manager}
 }
 
 func (a *API) CreateGame(w http.ResponseWriter, r *http.Request) {
@@ -33,6 +39,54 @@ func (a *API) CreateGame(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, g)
+}
+
+func (a *API) JoinMatchMaking(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var payload struct {
+		PlayerID string `json:"playerId"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		http.Error(w, "invalid request", http.StatusBadRequest)
+		return
+	}
+
+	res := a.Queue.JoinQueue(payload.PlayerID)
+
+	if res == nil {
+		resp := struct {
+			Status string
+		}{
+			Status: "waiting",
+		}
+		writeJSON(w, http.StatusOK, resp)
+		return
+	}
+
+	game, err := a.Store.CreateGame()
+	if err != nil {
+		http.Error(w, "failed to create game", http.StatusInternalServerError)
+		return
+	}
+
+	msg := ws.Message{
+		Type:   "match_found",
+		GameID: game.ID,
+	}
+	if a.Hub != nil {
+		_ = a.Hub.SendTo(res.PlayerA, msg)
+		_ = a.Hub.SendTo(res.PlayerB, msg)
+	}
+	a.Manager.AddGame(game.ID, res.PlayerA, res.PlayerB)
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"Status": "matched",
+		"gameId": game.ID,
+	})
 }
 
 func (a *API) GetGame(w http.ResponseWriter, r *http.Request) {
@@ -76,10 +130,10 @@ func (a *API) MakeMove(w http.ResponseWriter, r *http.Request) {
 	}
 
 	id := parts[0]
-	
+
 	var payload struct {
 		Move string `json:"move"`
-		By string `json:"by,omitempty"`
+		By   string `json:"by,omitempty"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
@@ -95,7 +149,7 @@ func (a *API) MakeMove(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err != nil {
-		http.Error(w, "illegal move: " + err.Error(), http.StatusBadRequest)
+		http.Error(w, "illegal move: "+err.Error(), http.StatusBadRequest)
 		return
 	}
 
@@ -103,15 +157,14 @@ func (a *API) MakeMove(w http.ResponseWriter, r *http.Request) {
 
 	resp := struct {
 		Status string
-		Move models.MoveRecord
-		FEN string
-	} {
+		Move   models.MoveRecord
+		FEN    string
+	}{
 		Status: "ok",
-		Move: rec,
-		FEN: g.CurrentFEN,
+		Move:   rec,
+		FEN:    g.CurrentFEN,
 	}
 	writeJSON(w, http.StatusOK, resp)
-
 
 }
 
