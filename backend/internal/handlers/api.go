@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"strings"
@@ -74,15 +75,29 @@ func (a *API) JoinMatchMaking(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	msg := ws.Message{
+	a.Manager.AddGame(game.ID, res.PlayerA, res.PlayerB)
+	msgA := ws.Message{
 		Type:   "match_found",
 		GameID: game.ID,
+		Payload: json.RawMessage(
+			fmt.Sprintf(`{
+				"playerColor": "%s"
+			}`, a.Manager.GetGame(game.ID).PlayerAColor),
+		),
+	}
+	msgB := ws.Message{
+		Type:   "match_found",
+		GameID: game.ID,
+		Payload: json.RawMessage(
+			fmt.Sprintf(`{
+				"playerColor": "%s"
+			}`, a.Manager.GetGame(game.ID).PlayerBColor),
+		),
 	}
 	if a.Hub != nil {
-		_ = a.Hub.SendTo(res.PlayerA, msg)
-		_ = a.Hub.SendTo(res.PlayerB, msg)
+		_ = a.Hub.SendTo(res.PlayerA, msgA)
+		_ = a.Hub.SendTo(res.PlayerB, msgB)
 	}
-	a.Manager.AddGame(game.ID, res.PlayerA, res.PlayerB)
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"Status": "matched",
 		"gameId": game.ID,

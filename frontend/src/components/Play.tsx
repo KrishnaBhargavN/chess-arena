@@ -6,18 +6,23 @@ import GameControls from "./GameControls";
 import GameInfo from "./GameInfo";
 import { useChessGame } from "../hooks/useChessGame";
 import { useEffect, useState } from "react";
-import type { Color } from "chessground/types";
 import Loading from "./MatchMaking";
 import { useWS } from "../context/WSContext";
 import { useParams } from "react-router-dom";
+import type { Color } from "chessground/types";
 
 export default function Play() {
   const { game, fen, pgn, move, reset, undo, status } = useChessGame();
-  const [orientation, setOrientation] = useState<Color>("white");
+  const stored = localStorage.getItem(
+    localStorage.getItem("playerId") ?? crypto.randomUUID()
+  );
+  
+  const orientation: Color = stored === "black" ? "black" : "white";
+  const [turnColor, setTurnColor] = useState<String>("white");
   const [loading, setLoading] = useState<boolean>(false);
   const ws = useWS();
   const flip = () => {
-    setOrientation((o) => (o === "white" ? "black" : "white"));
+    setTurnColor((o) => (o === "white" ? "black" : "white"));
   };
   const { gameId } = useParams();
   const onMove = (from: string, to: string) => {

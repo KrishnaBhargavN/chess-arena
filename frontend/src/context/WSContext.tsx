@@ -39,6 +39,8 @@ export function WSProvider({ children }: { children: React.ReactNode }) {
         console.log(data);
 
         if (data.type === "match_found") {
+          const color : string = data.payload.playerColor;
+          localStorage.setItem(localStorage.getItem("playerId")??crypto.randomUUID(), color);
           navigate(`/play/${data.gameId}`);
         }
       };

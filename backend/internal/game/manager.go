@@ -1,9 +1,13 @@
 package game
 
+import "math/rand"
+
 type Game struct {
-	ID      string
-	PlayerA string
-	PlayerB string
+	ID           string
+	PlayerA      string
+	PlayerB      string
+	PlayerAColor string
+	PlayerBColor string
 }
 
 type GameManager struct {
@@ -23,10 +27,18 @@ func (gm *GameManager) GetGame(id string) *Game {
 }
 
 func (gm *GameManager) AddGame(gameId, playerA, playerB string) {
+	playerAColor := "white"
+	playerBColor := "black"
+	if rand.Intn(2) == 0 {
+		playerAColor = "black"
+		playerBColor = "white"
+	}
 	game := Game{
-		ID:      gameId,
-		PlayerA: playerA,
-		PlayerB: playerB,
+		ID:           gameId,
+		PlayerA:      playerA,
+		PlayerB:      playerB,
+		PlayerAColor: playerAColor,
+		PlayerBColor: playerBColor,
 	}
 	gm.games[gameId] = &game
 	gm.playerToGame[playerA] = &game
