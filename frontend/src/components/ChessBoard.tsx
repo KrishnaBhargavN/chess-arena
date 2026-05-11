@@ -27,12 +27,13 @@ function buildDests(chess: Chess): Map<Key, Key[]> {
 export default function ChessBoard({ fen, onMove, game, orientation }: Props) {
   const boardRef = useRef<HTMLDivElement>(null);
   const cgRef = useRef<Api | null>(null);
-
+  const turnColor = game.turn() === "w" ? "white" : "black";
   useEffect(() => {
     if (!boardRef.current) return;
     const cg = Chessground(boardRef.current, {
       fen,
-      turnColor: orientation,
+      turnColor,
+      orientation,
       movable: {
         free: false,
         dests: buildDests(game),
@@ -49,6 +50,8 @@ export default function ChessBoard({ fen, onMove, game, orientation }: Props) {
   useEffect(() => {
     cgRef.current?.set({
       fen,
+      turnColor,
+      orientation,
       movable: {
         free: false,
         dests: buildDests(game),
@@ -58,6 +61,12 @@ export default function ChessBoard({ fen, onMove, game, orientation }: Props) {
   useEffect(() => {
     cgRef.current?.set({ orientation });
   }, [orientation]);
+
+  useEffect(() => {
+    const onResize = () => cgRef.current?.redrawAll();
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
 
   return <div ref={boardRef} style={{ width: 560, height: 560 }}></div>;
 }
