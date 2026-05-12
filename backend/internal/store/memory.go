@@ -5,6 +5,7 @@ import (
 	"sync"
 
 	"github.com/google/uuid"
+	"github.com/notnil/chess"
 	"krishna.com/go-chess-backend/internal/game"
 	"krishna.com/go-chess-backend/internal/models"
 )
@@ -15,6 +16,7 @@ type Store interface {
 	CreateGame() (models.Game, error)
 	GetGame(id string) (models.Game, error)
 	ApplyMove(gameID, moveStr, by string) (models.MoveRecord, error)
+	GetTurn(gameID string) chess.Color
 }
 
 type MemoryStore struct {
@@ -84,4 +86,10 @@ func (s *MemoryStore) ApplyMove(gameID, moveStr, by string) (models.MoveRecord, 
 	}
 
 	return rec, nil
+}
+
+func (s *MemoryStore) GetTurn(gameID string) chess.Color {
+	sess := s.sessions[gameID]
+
+	return sess.Turn()
 }

@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/notnil/chess"
 	"krishna.com/go-chess-backend/internal/game"
 	"krishna.com/go-chess-backend/internal/matchmaking"
 	"krishna.com/go-chess-backend/internal/models"
@@ -148,12 +149,37 @@ func (a *API) MakeMove(w http.ResponseWriter, r *http.Request) {
 
 	var payload struct {
 		Move string `json:"move"`
-		By   string `json:"by,omitempty"`
+		By   string `json:"by"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 		http.Error(w, "invalid json", http.StatusBadRequest)
 		return
+	}
+
+	pID := payload.By
+	gg := a.Manager.GetGame(id)
+	currentTurn := a.Store.GetTurn(id)
+	var playerColor string
+	if gg.PlayerA == pID {
+		playerColor = gg.PlayerAColor
+	} else if gg.PlayerB == pID {
+		playerColor = gg.PlayerBColor
+	} else {
+		http.Error(w, "invalid request", http.StatusBadRequest)
+		return
+	}
+
+	if currentTurn == chess.Black {
+		if playerColor == "white" {
+			http.Error(w, "invalid move", http.StatusBadRequest)
+			return
+		}
+	} else {
+		if playerColor == "black" {
+			http.Error(w, "invalid move", http.StatusBadRequest)
+			return
+		}
 	}
 
 	rec, err := a.Store.ApplyMove(id, payload.Move, payload.By)

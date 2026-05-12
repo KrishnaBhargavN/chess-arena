@@ -83,3 +83,12 @@ func (s *Session) ApplyMove(moveStr string, by string) (models.MoveRecord, error
 
 	return rec, nil
 }
+
+func (s *Session) Turn() chess.Color {
+	moves := s.game.Moves()
+
+	if len(moves)%2 == 0 {
+		return chess.White
+	}
+	return chess.Black
+}
