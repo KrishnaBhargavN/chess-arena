@@ -42,7 +42,6 @@ func (q *Queue) LeaveQueue(playerID string) {
 		return
 	}
 	q.waiting = slices.Delete(q.waiting, idx, idx+1)
-	q.mu.Unlock()
 }
 
 func (q *Queue) ClearQueue() {

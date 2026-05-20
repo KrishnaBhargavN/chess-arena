@@ -20,9 +20,8 @@ var upgrader = websocket.Upgrader{
 
 func ServeWS(h *Hub, w http.ResponseWriter, r *http.Request, st *store.MemoryStore, manager *game.GameManager) {
 	conn, err := upgrader.Upgrade(w, r, nil)
-
 	if err != nil {
-		log.Println("ws upgrade: ", err)
+		log.Println("ws upgrade:", err)
 		return
 	}
 
@@ -36,31 +35,55 @@ func ServeWS(h *Hub, w http.ResponseWriter, r *http.Request, st *store.MemorySto
 		_ = conn.Close()
 		return
 	}
+
 	var payload struct {
 		PlayerID string `json:"playerId"`
+		GameID   string `json:"gameId"`
 	}
-
 	json.Unmarshal(initMsg.Payload, &payload)
 
 	if payload.PlayerID == "" {
-		conn.Close()
+		_ = conn.Close()
 		return
 	}
 
-	h.Register(payload.PlayerID, conn)
-	defer h.Unregister(payload.PlayerID)
-
-	conn.SetReadLimit(512)
 	_ = conn.SetReadDeadline(time.Now().Add(24 * time.Hour))
 	conn.SetPongHandler(func(string) error {
 		_ = conn.SetReadDeadline(time.Now().Add(24 * time.Hour))
 		return nil
 	})
 
+	if payload.GameID == "" {
+		serveLobby(h, conn, payload.PlayerID)
+		return
+	}
+
+	serveGame(h, conn, st, manager, payload.PlayerID, payload.GameID)
+}
+
+// serveLobby handles a connection that exists only to receive matchmaking notifications.
+func serveLobby(h *Hub, conn *websocket.Conn, playerID string) {
+	h.RegisterLobby(playerID, conn)
+	defer h.UnregisterLobby(playerID, conn)
+
+	for {
+		if _, _, err := conn.ReadMessage(); err != nil {
+			break
+		}
+	}
+}
+
+// serveGame handles a connection scoped to a specific game, forwarding move messages.
+func serveGame(h *Hub, conn *websocket.Conn, st *store.MemoryStore, manager *game.GameManager, playerID, gameID string) {
+	h.RegisterGame(playerID, gameID, conn)
+	defer h.UnregisterGame(playerID, gameID, conn)
+
+	conn.SetReadLimit(4096)
+
 	for {
 		var msg Message
 		if err := conn.ReadJSON(&msg); err != nil {
-			fmt.Println("here ", err)
+			fmt.Println("ws read error:", err)
 			break
 		}
 
@@ -68,19 +91,23 @@ func ServeWS(h *Hub, w http.ResponseWriter, r *http.Request, st *store.MemorySto
 			log.Println("move message", msg)
 			var movePayload MovePayload
 			json.Unmarshal(msg.Payload, &movePayload)
-			log.Println("move: ", movePayload.Move)
+			log.Println("move:", movePayload.Move)
+
 			st.ApplyMove(msg.GameID, movePayload.Move, movePayload.PlayerId)
-			game := manager.GetGame(msg.GameID)
-			if game == nil {
-				log.Println("could not get the game")
-				return
+
+			g := manager.GetGame(msg.GameID)
+			if g == nil {
+				log.Println("could not get the game:", msg.GameID)
+				continue
 			}
 
-			if movePayload.PlayerId == game.PlayerA {
-				h.SendTo(game.PlayerB, msg)
+			var opponentID string
+			if movePayload.PlayerId == g.PlayerA {
+				opponentID = g.PlayerB
 			} else {
-				h.SendTo(game.PlayerA, msg)
+				opponentID = g.PlayerA
 			}
+			h.SendToGame(opponentID, msg.GameID, msg)
 		}
 	}
 }

@@ -96,8 +96,8 @@ func (a *API) JoinMatchMaking(w http.ResponseWriter, r *http.Request) {
 		),
 	}
 	if a.Hub != nil {
-		_ = a.Hub.SendTo(res.PlayerA, msgA)
-		_ = a.Hub.SendTo(res.PlayerB, msgB)
+		_ = a.Hub.SendToLobby(res.PlayerA, msgA)
+		_ = a.Hub.SendToLobby(res.PlayerB, msgB)
 	}
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"Status": "matched",

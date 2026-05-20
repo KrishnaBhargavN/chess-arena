@@ -2,6 +2,7 @@ package game
 
 import (
 	"math/rand"
+	"sync"
 )
 
 type Game struct {
@@ -13,6 +14,7 @@ type Game struct {
 }
 
 type GameManager struct {
+	mu           sync.RWMutex
 	games        map[string]*Game
 	playerToGame map[string]*Game
 }
@@ -25,10 +27,14 @@ func NewGameManager() *GameManager {
 }
 
 func (gm *GameManager) GetGame(id string) *Game {
+	gm.mu.RLock()
+	defer gm.mu.RUnlock()
 	return gm.games[id]
 }
 
 func (gm *GameManager) AddGame(gameId, playerA, playerB string) {
+	gm.mu.Lock()
+	defer gm.mu.Unlock()
 	playerAColor := "white"
 	playerBColor := "black"
 	if rand.Intn(2) == 0 {
