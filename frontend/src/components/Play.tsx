@@ -60,15 +60,17 @@ export default function Play() {
   };
 
   return (
-    <div>
-      <div>
-        <GameInfo pgn={pgn} fen={fen} status={status} />
+    <div style={{ display: "flex", gap: 24, padding: 24, alignItems: "flex-start" }}>
+      <div style={{ flexShrink: 0 }}>
         <ChessBoard
           game={game}
           fen={fen}
           onMove={onMove}
           orientation={orientation}
         />
+      </div>
+      <div>
+        <GameInfo pgn={pgn} fen={fen} status={status} />
         <GameControls onReset={reset} onUndo={undo} onFlip={() => {}} />
       </div>
     </div>
