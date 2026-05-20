@@ -1,6 +1,16 @@
 import React from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
+
 const Navbar: React.FC = () => {
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
+
+  const handleLogout = async () => {
+    await logout();
+    navigate("/login");
+  };
+
   return (
     <nav className="navbar">
       <Link to="/" className="nav-brand">
@@ -8,11 +18,23 @@ const Navbar: React.FC = () => {
       </Link>
 
       <div className="nav-links">
-        <Link to="/play" className="nav-item">
-          Play
-        </Link>
-        <button className="btn btn-login">Log In</button>
-        <button className="btn btn-signup">Sign Up</button>
+        {user ? (
+          <>
+            <span className="nav-item nav-username">{user.username}</span>
+            <button className="btn btn-login" onClick={handleLogout}>
+              Log Out
+            </button>
+          </>
+        ) : (
+          <>
+            <Link to="/login" className="btn btn-login">
+              Log In
+            </Link>
+            <Link to="/register" className="btn btn-signup">
+              Sign Up
+            </Link>
+          </>
+        )}
       </div>
     </nav>
   );

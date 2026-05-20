@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"krishna.com/go-chess-backend/internal/auth"
 	"krishna.com/go-chess-backend/internal/game"
 	"krishna.com/go-chess-backend/internal/handlers"
 	"krishna.com/go-chess-backend/internal/matchmaking"
@@ -16,20 +17,17 @@ import (
 	"krishna.com/go-chess-backend/internal/ws"
 )
 
-type Game struct {
-	ID     string `json:"id"`
-	Status string `json:"status"`
-}
+const frontendOrigin = "http://localhost:5173"
 
 func corsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-
-		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Origin", frontendOrigin)
+		w.Header().Set("Access-Control-Allow-Credentials", "true")
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
 
-		// Handle preflight request
 		if r.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusNoContent)
 			return
 		}
 
@@ -43,22 +41,36 @@ func main() {
 	q := matchmaking.NewQueue()
 	hub := ws.NewHub()
 	manager := game.NewGameManager()
+	userStore := auth.NewUserStore()
+	authHandler := auth.NewHandler(userStore)
 
 	api := handlers.NewApi(st, logger, q, hub, manager)
 	mux := http.NewServeMux()
+
+	// Auth routes (public)
+	mux.HandleFunc("/auth/register", authHandler.Register)
+	mux.HandleFunc("/auth/login", authHandler.Login)
+	mux.HandleFunc("/auth/logout", authHandler.Logout)
+	mux.HandleFunc("/auth/me", authHandler.Me)
+
+	// Game routes
 	mux.HandleFunc("/games", api.CreateGame)
 	mux.HandleFunc("/games/", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodGet {
 			api.GetGame(w, r)
 			return
 		}
-		if r.Method == http.MethodPost && len(r.URL.Path) > 1 && strings.HasSuffix(r.URL.Path, "/move") {
-			api.MakeMove(w, r)
+		if r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/move") {
+			auth.Middleware(http.HandlerFunc(api.MakeMove)).ServeHTTP(w, r)
 			return
 		}
 		http.Error(w, "not found", http.StatusNotFound)
 	})
-	mux.HandleFunc("/matchmaking/join", api.JoinMatchMaking)
+
+	// Matchmaking (protected)
+	mux.Handle("/matchmaking/join", auth.Middleware(http.HandlerFunc(api.JoinMatchMaking)))
+
+	// WebSocket (auth checked inside handler via cookie)
 	mux.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
 		ws.ServeWS(hub, w, r, st, manager)
 	})
@@ -84,10 +96,9 @@ func main() {
 	logger.Println("shutting down...")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-
 	defer cancel()
 	if err := srv.Shutdown(ctx); err != nil {
-		logger.Fatalf("shutdown:  %v", err)
+		logger.Fatalf("shutdown: %v", err)
 	}
 	logger.Println("server stopped")
 }

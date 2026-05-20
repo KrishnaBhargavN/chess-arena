@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/notnil/chess"
+	"krishna.com/go-chess-backend/internal/auth"
 	"krishna.com/go-chess-backend/internal/game"
 	"krishna.com/go-chess-backend/internal/matchmaking"
 	"krishna.com/go-chess-backend/internal/models"
@@ -33,13 +34,11 @@ func (a *API) CreateGame(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	g, err := a.Store.CreateGame()
-
 	if err != nil {
 		a.Logger.Println("create game: ", err)
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
-
 	writeJSON(w, http.StatusOK, g)
 }
 
@@ -49,50 +48,38 @@ func (a *API) JoinMatchMaking(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var payload struct {
-		PlayerID string `json:"playerId"`
-	}
-
-	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-		http.Error(w, "invalid request", http.StatusBadRequest)
+	playerID := auth.UserIDFromContext(r.Context())
+	if playerID == "" {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
 
-	res := a.Queue.JoinQueue(payload.PlayerID)
+	res := a.Queue.JoinQueue(playerID)
 
 	if res == nil {
-		resp := struct {
-			Status string
-		}{
-			Status: "waiting",
-		}
-		writeJSON(w, http.StatusOK, resp)
+		writeJSON(w, http.StatusOK, struct{ Status string }{Status: "waiting"})
 		return
 	}
 
-	game, err := a.Store.CreateGame()
+	g, err := a.Store.CreateGame()
 	if err != nil {
 		http.Error(w, "failed to create game", http.StatusInternalServerError)
 		return
 	}
 
-	a.Manager.AddGame(game.ID, res.PlayerA, res.PlayerB)
+	a.Manager.AddGame(g.ID, res.PlayerA, res.PlayerB)
 	msgA := ws.Message{
 		Type:   "match_found",
-		GameID: game.ID,
+		GameID: g.ID,
 		Payload: json.RawMessage(
-			fmt.Sprintf(`{
-				"playerColor": "%s"
-			}`, a.Manager.GetGame(game.ID).PlayerAColor),
+			fmt.Sprintf(`{"playerColor":"%s"}`, a.Manager.GetGame(g.ID).PlayerAColor),
 		),
 	}
 	msgB := ws.Message{
 		Type:   "match_found",
-		GameID: game.ID,
+		GameID: g.ID,
 		Payload: json.RawMessage(
-			fmt.Sprintf(`{
-				"playerColor": "%s"
-			}`, a.Manager.GetGame(game.ID).PlayerBColor),
+			fmt.Sprintf(`{"playerColor":"%s"}`, a.Manager.GetGame(g.ID).PlayerBColor),
 		),
 	}
 	if a.Hub != nil {
@@ -100,8 +87,9 @@ func (a *API) JoinMatchMaking(w http.ResponseWriter, r *http.Request) {
 		_ = a.Hub.SendToLobby(res.PlayerB, msgB)
 	}
 	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"Status": "matched",
-		"gameId": game.ID,
+		"Status":      "matched",
+		"gameId":      g.ID,
+		"playerColor": a.Manager.GetGame(g.ID).PlayerBColor,
 	})
 }
 
@@ -112,7 +100,6 @@ func (a *API) GetGame(w http.ResponseWriter, r *http.Request) {
 	}
 
 	id := strings.TrimPrefix(r.URL.Path, "/games/")
-
 	if id == "" {
 		http.Error(w, "missing id", http.StatusBadRequest)
 		return
@@ -121,8 +108,8 @@ func (a *API) GetGame(w http.ResponseWriter, r *http.Request) {
 	g, err := a.Store.GetGame(id)
 	if err == store.ErrorNotFound {
 		http.Error(w, "not found", http.StatusNotFound)
+		return
 	}
-
 	if err != nil {
 		a.Logger.Println("get game: ", err)
 		http.Error(w, "internal error", http.StatusInternalServerError)
@@ -139,74 +126,71 @@ func (a *API) MakeMove(w http.ResponseWriter, r *http.Request) {
 	}
 
 	parts := strings.Split(strings.TrimPrefix(r.URL.Path, "/games/"), "/")
-
 	if len(parts) < 2 || parts[1] != "move" {
 		http.Error(w, "bad path", http.StatusBadRequest)
 		return
 	}
-
 	id := parts[0]
+
+	playerID := auth.UserIDFromContext(r.Context())
+	if playerID == "" {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
 
 	var payload struct {
 		Move string `json:"move"`
-		By   string `json:"by"`
 	}
-
 	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 		http.Error(w, "invalid json", http.StatusBadRequest)
 		return
 	}
 
-	pID := payload.By
 	gg := a.Manager.GetGame(id)
+	if gg == nil {
+		http.Error(w, "game not found", http.StatusNotFound)
+		return
+	}
+
 	currentTurn := a.Store.GetTurn(id)
 	var playerColor string
-	if gg.PlayerA == pID {
+	if gg.PlayerA == playerID {
 		playerColor = gg.PlayerAColor
-	} else if gg.PlayerB == pID {
+	} else if gg.PlayerB == playerID {
 		playerColor = gg.PlayerBColor
 	} else {
-		http.Error(w, "invalid request", http.StatusBadRequest)
+		http.Error(w, "not a participant", http.StatusForbidden)
 		return
 	}
 
 	if currentTurn == chess.Black {
 		if playerColor == "white" {
-			http.Error(w, "invalid move", http.StatusBadRequest)
+			http.Error(w, "not your turn", http.StatusBadRequest)
 			return
 		}
 	} else {
 		if playerColor == "black" {
-			http.Error(w, "invalid move", http.StatusBadRequest)
+			http.Error(w, "not your turn", http.StatusBadRequest)
 			return
 		}
 	}
 
-	rec, err := a.Store.ApplyMove(id, payload.Move, payload.By)
-
+	rec, err := a.Store.ApplyMove(id, payload.Move, playerID)
 	if err == store.ErrorNotFound {
 		http.Error(w, "not found", http.StatusNotFound)
 		return
 	}
-
 	if err != nil {
 		http.Error(w, "illegal move: "+err.Error(), http.StatusBadRequest)
 		return
 	}
 
 	g, _ := a.Store.GetGame(id)
-
-	resp := struct {
+	writeJSON(w, http.StatusOK, struct {
 		Status string
 		Move   models.MoveRecord
 		FEN    string
-	}{
-		Status: "ok",
-		Move:   rec,
-		FEN:    g.CurrentFEN,
-	}
-	writeJSON(w, http.StatusOK, resp)
-
+	}{Status: "ok", Move: rec, FEN: g.CurrentFEN})
 }
 
 func writeJSON(w http.ResponseWriter, status int, v interface{}) {

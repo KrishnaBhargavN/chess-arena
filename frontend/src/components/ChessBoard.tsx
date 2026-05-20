@@ -28,9 +28,7 @@ export default function ChessBoard({ fen, onMove, game, orientation }: Props) {
   const boardRef = useRef<HTMLDivElement>(null);
   const cgRef = useRef<Api | null>(null);
   const turnColor = game.turn() === "w" ? "white" : "black";
-  const data = localStorage.getItem(localStorage.getItem("playerId")??crypto.randomUUID());
-  const playerColor : Color = data === "white"? "white" : "black";
-  
+
   useEffect(() => {
     if (!boardRef.current) return;
     const cg = Chessground(boardRef.current, {
@@ -43,7 +41,7 @@ export default function ChessBoard({ fen, onMove, game, orientation }: Props) {
         events: {
           after: onMove,
         },
-        color: playerColor
+        color: orientation,
       },
     });
 
@@ -63,7 +61,7 @@ export default function ChessBoard({ fen, onMove, game, orientation }: Props) {
     });
   }, [fen, game]);
   useEffect(() => {
-    cgRef.current?.set({ orientation });
+    cgRef.current?.set({ orientation, movable: { color: orientation } });
   }, [orientation]);
 
   useEffect(() => {

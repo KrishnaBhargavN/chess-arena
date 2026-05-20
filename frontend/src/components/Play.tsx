@@ -11,25 +11,20 @@ import type { Color } from "chessground/types";
 
 export default function Play() {
   const { game, fen, pgn, move, reset, undo, status } = useChessGame();
-  const stored = localStorage.getItem(
-    localStorage.getItem("playerId") ?? crypto.randomUUID()
-  );
+  const { gameId } = useParams();
+  const stored = localStorage.getItem(`color_${gameId}`);
   const orientation: Color = stored === "black" ? "black" : "white";
   const [, setTurnColor] = useState<string>("white");
   const gameWsRef = useRef<WebSocket | null>(null);
-  const { gameId } = useParams();
 
   useEffect(() => {
     if (!gameId) return;
 
-    const playerId = localStorage.getItem("playerId");
     const ws = new WebSocket("ws://localhost:8080/ws");
     gameWsRef.current = ws;
 
     ws.onopen = () => {
-      ws.send(
-        JSON.stringify({ type: "auth", payload: { playerId, gameId } })
-      );
+      ws.send(JSON.stringify({ type: "auth", payload: { gameId } }));
     };
 
     ws.onmessage = (event) => {
@@ -57,12 +52,7 @@ export default function Play() {
       JSON.stringify({
         type: "move",
         gameId,
-        payload: {
-          move: moveMade,
-          from,
-          to,
-          playerId: localStorage.getItem("playerId"),
-        },
+        payload: { move: moveMade, from, to },
       })
     );
 

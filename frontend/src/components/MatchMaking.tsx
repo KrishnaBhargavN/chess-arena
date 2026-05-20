@@ -1,20 +1,16 @@
-import axios from "axios";
 import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { api } from "../context/AuthContext";
 
 const MatchMaking: React.FC = () => {
   const navigate = useNavigate();
+
   useEffect(() => {
     const fetchData = async () => {
       try {
-        if (!localStorage.getItem("playerId")) {
-          localStorage.setItem("playerId", crypto.randomUUID());
-        }
-        const res = await axios.post("http://localhost:8080/matchmaking/join", {
-          playerId: localStorage.getItem("playerId"),
-        });
-        console.log(res.data);
+        const res = await api.post("/matchmaking/join");
         if (res.data.Status === "matched") {
+          localStorage.setItem(`color_${res.data.gameId}`, res.data.playerColor);
           navigate(`/play/${res.data.gameId}`);
         }
       } catch (err) {
@@ -23,6 +19,7 @@ const MatchMaking: React.FC = () => {
     };
     fetchData();
   }, []);
+
   return <div>Waiting for other players to join...</div>;
 };
 

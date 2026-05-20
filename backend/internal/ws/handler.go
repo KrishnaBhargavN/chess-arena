@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+	"krishna.com/go-chess-backend/internal/auth"
 	"krishna.com/go-chess-backend/internal/game"
 	"krishna.com/go-chess-backend/internal/store"
 )
@@ -15,10 +16,19 @@ import (
 var upgrader = websocket.Upgrader{
 	ReadBufferSize:  1024,
 	WriteBufferSize: 1024,
-	CheckOrigin:     func(r *http.Request) bool { return true },
+	CheckOrigin: func(r *http.Request) bool {
+		return r.Header.Get("Origin") == "http://localhost:5173"
+	},
 }
 
 func ServeWS(h *Hub, w http.ResponseWriter, r *http.Request, st *store.MemoryStore, manager *game.GameManager) {
+	claims, err := auth.TokenFromRequest(r)
+	if err != nil {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	playerID := claims.UserID
+
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		log.Println("ws upgrade:", err)
@@ -37,15 +47,9 @@ func ServeWS(h *Hub, w http.ResponseWriter, r *http.Request, st *store.MemorySto
 	}
 
 	var payload struct {
-		PlayerID string `json:"playerId"`
-		GameID   string `json:"gameId"`
+		GameID string `json:"gameId"`
 	}
 	json.Unmarshal(initMsg.Payload, &payload)
-
-	if payload.PlayerID == "" {
-		_ = conn.Close()
-		return
-	}
 
 	_ = conn.SetReadDeadline(time.Now().Add(24 * time.Hour))
 	conn.SetPongHandler(func(string) error {
@@ -54,14 +58,13 @@ func ServeWS(h *Hub, w http.ResponseWriter, r *http.Request, st *store.MemorySto
 	})
 
 	if payload.GameID == "" {
-		serveLobby(h, conn, payload.PlayerID)
+		serveLobby(h, conn, playerID)
 		return
 	}
 
-	serveGame(h, conn, st, manager, payload.PlayerID, payload.GameID)
+	serveGame(h, conn, st, manager, playerID, payload.GameID)
 }
 
-// serveLobby handles a connection that exists only to receive matchmaking notifications.
 func serveLobby(h *Hub, conn *websocket.Conn, playerID string) {
 	h.RegisterLobby(playerID, conn)
 	defer h.UnregisterLobby(playerID, conn)
@@ -73,7 +76,6 @@ func serveLobby(h *Hub, conn *websocket.Conn, playerID string) {
 	}
 }
 
-// serveGame handles a connection scoped to a specific game, forwarding move messages.
 func serveGame(h *Hub, conn *websocket.Conn, st *store.MemoryStore, manager *game.GameManager, playerID, gameID string) {
 	h.RegisterGame(playerID, gameID, conn)
 	defer h.UnregisterGame(playerID, gameID, conn)
@@ -93,7 +95,7 @@ func serveGame(h *Hub, conn *websocket.Conn, st *store.MemoryStore, manager *gam
 			json.Unmarshal(msg.Payload, &movePayload)
 			log.Println("move:", movePayload.Move)
 
-			st.ApplyMove(msg.GameID, movePayload.Move, movePayload.PlayerId)
+			st.ApplyMove(msg.GameID, movePayload.Move, playerID)
 
 			g := manager.GetGame(msg.GameID)
 			if g == nil {
@@ -102,7 +104,7 @@ func serveGame(h *Hub, conn *websocket.Conn, st *store.MemoryStore, manager *gam
 			}
 
 			var opponentID string
-			if movePayload.PlayerId == g.PlayerA {
+			if playerID == g.PlayerA {
 				opponentID = g.PlayerB
 			} else {
 				opponentID = g.PlayerA
