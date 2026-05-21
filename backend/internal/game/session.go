@@ -92,3 +92,18 @@ func (s *Session) Turn() chess.Color {
 	}
 	return chess.Black
 }
+
+func (s *Session) Outcome() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	switch s.game.Outcome() {
+	case chess.WhiteWon:
+		return "white"
+	case chess.BlackWon:
+		return "black"
+	case chess.Draw:
+		return "draw"
+	default:
+		return ""
+	}
+}

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"krishna.com/go-chess-backend/internal/auth"
+	"krishna.com/go-chess-backend/internal/db"
 	"krishna.com/go-chess-backend/internal/game"
 	"krishna.com/go-chess-backend/internal/handlers"
 	"krishna.com/go-chess-backend/internal/matchmaking"
@@ -37,14 +38,36 @@ func corsMiddleware(next http.Handler) http.Handler {
 
 func main() {
 	logger := log.New(os.Stdout, "", log.LstdFlags)
-	st := store.NewMemoryStore()
+
+	var st store.Store
+	var userStore auth.UserStorer
+
+	if dbURL := os.Getenv("DATABASE_URL"); dbURL != "" {
+		pool, err := db.Connect(dbURL)
+		if err != nil {
+			logger.Fatalf("db connect: %v", err)
+		}
+		defer pool.Close()
+
+		if err := db.Migrate(pool); err != nil {
+			logger.Fatalf("db migrate: %v", err)
+		}
+
+		logger.Println("connected to postgres")
+		st = store.NewPostgresStore(pool)
+		userStore = auth.NewPostgresUserStore(pool)
+	} else {
+		logger.Println("DATABASE_URL not set — using in-memory stores")
+		st = store.NewMemoryStore()
+		userStore = auth.NewUserStore()
+	}
+
 	q := matchmaking.NewQueue()
 	hub := ws.NewHub()
 	manager := game.NewGameManager()
-	userStore := auth.NewUserStore()
 	authHandler := auth.NewHandler(userStore)
-
 	api := handlers.NewApi(st, logger, q, hub, manager)
+
 	mux := http.NewServeMux()
 
 	// Auth routes (public)
@@ -54,9 +77,22 @@ func main() {
 	mux.HandleFunc("/auth/me", authHandler.Me)
 
 	// Game routes
-	mux.HandleFunc("/games", api.CreateGame)
+	mux.HandleFunc("/games", func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			auth.Middleware(http.HandlerFunc(api.ListGames)).ServeHTTP(w, r)
+		case http.MethodPost:
+			api.CreateGame(w, r)
+		default:
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		}
+	})
 	mux.HandleFunc("/games/", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodGet {
+			if strings.HasSuffix(r.URL.Path, "/moves") {
+				auth.Middleware(http.HandlerFunc(api.GetMoves)).ServeHTTP(w, r)
+				return
+			}
 			api.GetGame(w, r)
 			return
 		}

@@ -5,9 +5,10 @@ import { Chess } from "chess.js";
 import type { Color, Key } from "chessground/types";
 interface Props {
   fen: string;
-  onMove: (from: string, to: string) => void;
-  game: Chess;
+  onMove?: (from: string, to: string) => void;
+  game?: Chess;
   orientation: Color;
+  viewOnly?: boolean;
 }
 
 function buildDests(chess: Chess): Map<Key, Key[]> {
@@ -24,10 +25,10 @@ function buildDests(chess: Chess): Map<Key, Key[]> {
   return dests;
 }
 
-export default function ChessBoard({ fen, onMove, game, orientation }: Props) {
+export default function ChessBoard({ fen, onMove, game, orientation, viewOnly }: Props) {
   const boardRef = useRef<HTMLDivElement>(null);
   const cgRef = useRef<Api | null>(null);
-  const turnColor = game.turn() === "w" ? "white" : "black";
+  const turnColor = game && game.turn() === "b" ? "black" : "white";
 
   useEffect(() => {
     if (!boardRef.current) return;
@@ -35,14 +36,15 @@ export default function ChessBoard({ fen, onMove, game, orientation }: Props) {
       fen,
       turnColor,
       orientation,
-      movable: {
-        free: false,
-        dests: buildDests(game),
-        events: {
-          after: onMove,
-        },
-        color: orientation,
-      },
+      viewOnly: !!viewOnly,
+      movable: viewOnly
+        ? { free: false }
+        : {
+            free: false,
+            dests: game ? buildDests(game) : new Map(),
+            events: { after: onMove },
+            color: orientation,
+          },
     });
 
     cgRef.current = cg;
@@ -54,15 +56,18 @@ export default function ChessBoard({ fen, onMove, game, orientation }: Props) {
       fen,
       turnColor,
       orientation,
-      movable: {
-        free: false,
-        dests: buildDests(game),
-      },
+      movable: viewOnly
+        ? { free: false }
+        : {
+            free: false,
+            dests: game ? buildDests(game) : new Map(),
+          },
     });
-  }, [fen, game]);
+  }, [fen, game, viewOnly]);
   useEffect(() => {
+    if (viewOnly) return;
     cgRef.current?.set({ orientation, movable: { color: orientation } });
-  }, [orientation]);
+  }, [orientation, viewOnly]);
 
   useEffect(() => {
     const onResize = () => cgRef.current?.redrawAll();

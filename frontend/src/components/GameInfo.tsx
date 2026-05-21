@@ -10,8 +10,8 @@ export default function GameInfo({ status, pgn, fen }: Props) {
       <h2>{status}</h2>
 
       {pgn && (
-        <div>
-          <strong>PGN:</strong> {pgn}
+        <div style={{ fontFamily: "monospace", lineHeight: 1.6 }}>
+          {pgn}
         </div>
       )}
 

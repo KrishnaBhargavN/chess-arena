@@ -21,7 +21,7 @@ var upgrader = websocket.Upgrader{
 	},
 }
 
-func ServeWS(h *Hub, w http.ResponseWriter, r *http.Request, st *store.MemoryStore, manager *game.GameManager) {
+func ServeWS(h *Hub, w http.ResponseWriter, r *http.Request, st store.Store, manager *game.GameManager) {
 	claims, err := auth.TokenFromRequest(r)
 	if err != nil {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
@@ -76,7 +76,7 @@ func serveLobby(h *Hub, conn *websocket.Conn, playerID string) {
 	}
 }
 
-func serveGame(h *Hub, conn *websocket.Conn, st *store.MemoryStore, manager *game.GameManager, playerID, gameID string) {
+func serveGame(h *Hub, conn *websocket.Conn, st store.Store, manager *game.GameManager, playerID, gameID string) {
 	h.RegisterGame(playerID, gameID, conn)
 	defer h.UnregisterGame(playerID, gameID, conn)
 
@@ -110,6 +110,18 @@ func serveGame(h *Hub, conn *websocket.Conn, st *store.MemoryStore, manager *gam
 				opponentID = g.PlayerA
 			}
 			h.SendToGame(opponentID, msg.GameID, msg)
+
+			if outcome := st.Outcome(msg.GameID); outcome != "" {
+				gameOverMsg := Message{
+					Type:   "game_over",
+					GameID: msg.GameID,
+					Payload: json.RawMessage(
+						fmt.Sprintf(`{"outcome":"%s"}`, outcome),
+					),
+				}
+				h.SendToGame(playerID, msg.GameID, gameOverMsg)
+				h.SendToGame(opponentID, msg.GameID, gameOverMsg)
+			}
 		}
 	}
 }

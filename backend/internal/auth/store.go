@@ -12,6 +12,11 @@ var ErrUserExists = errors.New("user already exists")
 var ErrInvalidCredentials = errors.New("invalid credentials")
 var ErrUserNotFound = errors.New("user not found")
 
+type UserStorer interface {
+	Create(username, password string) (*User, error)
+	Authenticate(username, password string) (*User, error)
+}
+
 type User struct {
 	ID           string
 	Username     string

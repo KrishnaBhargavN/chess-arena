@@ -10,6 +10,8 @@ import "./App.css";
 import { AuthProvider } from "./context/AuthContext";
 import { WSProvider } from "./context/WSContext";
 import MatchMaking from "./components/MatchMaking";
+import GamesList from "./components/GamesList";
+import Replay from "./components/Replay";
 
 const App: React.FC = () => {
   return (
@@ -35,6 +37,22 @@ const App: React.FC = () => {
                 element={
                   <ProtectedRoute>
                     <Play />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/games"
+                element={
+                  <ProtectedRoute>
+                    <GamesList />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/replay/:gameId"
+                element={
+                  <ProtectedRoute>
+                    <Replay />
                   </ProtectedRoute>
                 }
               />

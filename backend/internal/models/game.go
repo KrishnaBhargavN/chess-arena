@@ -13,8 +13,16 @@ type MoveRecord struct {
 }
 
 type Game struct {
-	ID         string       `json:"id"`
-	Status     string       `json:"status"`
-	CurrentFEN string       `json:"initial_fen"`
-	Moves      []MoveRecord `json:"moves"`
+	ID              string       `json:"id"`
+	PlayerA         string       `json:"playerA,omitempty"`
+	PlayerB         string       `json:"playerB,omitempty"`
+	PlayerAUsername string       `json:"playerAUsername,omitempty"`
+	PlayerBUsername string       `json:"playerBUsername,omitempty"`
+	PlayerAColor    string       `json:"playerAColor,omitempty"`
+	PlayerBColor    string       `json:"playerBColor,omitempty"`
+	Status          string       `json:"status"`
+	CurrentFEN      string       `json:"initial_fen"`
+	Moves           []MoveRecord `json:"moves"`
+	CreatedAt       time.Time    `json:"createdAt,omitempty"`
+	FinishedAt      *time.Time   `json:"finishedAt,omitempty"`
 }

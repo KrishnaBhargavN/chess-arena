@@ -7,10 +7,10 @@ import (
 )
 
 type Handler struct {
-	store *UserStore
+	store UserStorer
 }
 
-func NewHandler(store *UserStore) *Handler {
+func NewHandler(store UserStorer) *Handler {
 	return &Handler{store: store}
 }
 

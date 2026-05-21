@@ -1,6 +1,18 @@
 import { useRef, useState } from "react";
 import { Chess } from "chess.js";
 
+function formatMoves(g: Chess): string {
+  const moves = g.history();
+  const out: string[] = [];
+  for (let i = 0; i < moves.length; i += 2) {
+    const num = i / 2 + 1;
+    const white = moves[i];
+    const black = moves[i + 1] ?? "";
+    out.push(black ? `${num}. ${white} ${black}` : `${num}. ${white}`);
+  }
+  return out.join("  ");
+}
+
 export function useChessGame() {
   const gameRef = useRef(new Chess());
 
@@ -41,7 +53,7 @@ export function useChessGame() {
     if (!result) return;
 
     setFen(gameRef.current.fen());
-    setPgn(gameRef.current.pgn());
+    setPgn(formatMoves(gameRef.current));
 
     updateStatus();
   };
@@ -49,7 +61,7 @@ export function useChessGame() {
   const undo = () => {
     gameRef.current.undo();
     setFen(gameRef.current.fen());
-    setPgn(gameRef.current.pgn());
+    setPgn(formatMoves(gameRef.current));
     updateStatus();
   };
 

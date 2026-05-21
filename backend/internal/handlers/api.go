@@ -68,18 +68,21 @@ func (a *API) JoinMatchMaking(w http.ResponseWriter, r *http.Request) {
 	}
 
 	a.Manager.AddGame(g.ID, res.PlayerA, res.PlayerB)
+	gm := a.Manager.GetGame(g.ID)
+	_ = a.Store.UpdateGamePlayers(g.ID, res.PlayerA, res.PlayerB, gm.PlayerAColor, gm.PlayerBColor)
+
 	msgA := ws.Message{
 		Type:   "match_found",
 		GameID: g.ID,
 		Payload: json.RawMessage(
-			fmt.Sprintf(`{"playerColor":"%s"}`, a.Manager.GetGame(g.ID).PlayerAColor),
+			fmt.Sprintf(`{"playerColor":"%s"}`, gm.PlayerAColor),
 		),
 	}
 	msgB := ws.Message{
 		Type:   "match_found",
 		GameID: g.ID,
 		Payload: json.RawMessage(
-			fmt.Sprintf(`{"playerColor":"%s"}`, a.Manager.GetGame(g.ID).PlayerBColor),
+			fmt.Sprintf(`{"playerColor":"%s"}`, gm.PlayerBColor),
 		),
 	}
 	if a.Hub != nil {
@@ -89,7 +92,7 @@ func (a *API) JoinMatchMaking(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"Status":      "matched",
 		"gameId":      g.ID,
-		"playerColor": a.Manager.GetGame(g.ID).PlayerBColor,
+		"playerColor": gm.PlayerBColor,
 	})
 }
 
@@ -117,6 +120,55 @@ func (a *API) GetGame(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, g)
+}
+
+func (a *API) ListGames(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	userID := auth.UserIDFromContext(r.Context())
+	if userID == "" {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	games, err := a.Store.ListGames(userID)
+	if err != nil {
+		a.Logger.Println("list games: ", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, games)
+}
+
+func (a *API) GetMoves(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	parts := strings.Split(strings.TrimPrefix(r.URL.Path, "/games/"), "/")
+	if len(parts) < 2 || parts[1] != "moves" {
+		http.Error(w, "bad path", http.StatusBadRequest)
+		return
+	}
+	id := parts[0]
+
+	g, err := a.Store.GetGame(id)
+	if err == store.ErrorNotFound {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	if err != nil {
+		a.Logger.Println("get moves: ", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, g.Moves)
 }
 
 func (a *API) MakeMove(w http.ResponseWriter, r *http.Request) {

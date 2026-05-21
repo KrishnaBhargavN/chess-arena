@@ -20,6 +20,7 @@ const Navbar: React.FC = () => {
       <div className="nav-links">
         {user ? (
           <>
+            <Link to="/games" className="nav-item">My Games</Link>
             <span className="nav-item nav-username">{user.username}</span>
             <button className="btn btn-login" onClick={handleLogout}>
               Log Out

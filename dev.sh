@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+# Starts postgres, backend, and frontend. Press Ctrl+C to stop everything.
+
+set -e
+
+DATABASE_URL="postgres://gochess:gochess@localhost:5432/gochess"
+
+cleanup() {
+  echo ""
+  echo "[dev] shutting down..."
+  kill 0
+  docker compose down
+}
+trap cleanup EXIT
+
+echo "[dev] starting postgres..."
+docker compose up -d
+
+echo "[dev] waiting for postgres..."
+until docker compose exec -T postgres pg_isready -U gochess >/dev/null 2>&1; do
+  sleep 1
+done
+
+echo "[dev] starting backend on :8080"
+(cd backend && DATABASE_URL="$DATABASE_URL" go run ./cmd/server) &
+
+echo "[dev] starting frontend on :5173"
+(cd frontend && npm run dev) &
+
+echo "[dev] ready. open http://localhost:5173  (Ctrl+C to stop)"
+wait
