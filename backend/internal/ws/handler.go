@@ -97,37 +97,56 @@ func serveGame(h *Hub, conn *websocket.Conn, st store.Store, manager *game.GameM
 
 			st.ApplyMove(msg.GameID, movePayload.Move, playerID)
 
-			var playerA, playerB string
-			if g := manager.GetGame(msg.GameID); g != nil {
-				playerA, playerB = g.PlayerA, g.PlayerB
-			} else {
-				gm, err := st.GetGame(msg.GameID)
-				if err != nil {
-					log.Println("could not get the game:", msg.GameID, err)
-					continue
-				}
-				playerA, playerB = gm.PlayerA, gm.PlayerB
-			}
-
-			var opponentID string
-			if playerID == playerA {
-				opponentID = playerB
-			} else {
-				opponentID = playerA
+			opponentID, ok := opponentOf(manager, st, msg.GameID, playerID)
+			if !ok {
+				continue
 			}
 			h.SendToGame(opponentID, msg.GameID, msg)
 
 			if outcome := st.Outcome(msg.GameID); outcome != "" {
-				gameOverMsg := Message{
-					Type:   "game_over",
-					GameID: msg.GameID,
-					Payload: json.RawMessage(
-						fmt.Sprintf(`{"outcome":"%s"}`, outcome),
-					),
-				}
-				h.SendToGame(playerID, msg.GameID, gameOverMsg)
-				h.SendToGame(opponentID, msg.GameID, gameOverMsg)
+				broadcastGameOver(h, msg.GameID, outcome, playerID, opponentID)
 			}
 		}
+
+		if msg.Type == "resign" {
+			if err := st.Resign(msg.GameID, playerID); err != nil {
+				log.Println("resign:", err)
+				continue
+			}
+			opponentID, ok := opponentOf(manager, st, msg.GameID, playerID)
+			if !ok {
+				continue
+			}
+			outcome := st.Outcome(msg.GameID)
+			broadcastGameOver(h, msg.GameID, outcome, playerID, opponentID)
+		}
 	}
+}
+
+func opponentOf(manager *game.GameManager, st store.Store, gameID, playerID string) (string, bool) {
+	var playerA, playerB string
+	if g := manager.GetGame(gameID); g != nil {
+		playerA, playerB = g.PlayerA, g.PlayerB
+	} else {
+		gm, err := st.GetGame(gameID)
+		if err != nil {
+			log.Println("could not get the game:", gameID, err)
+			return "", false
+		}
+		playerA, playerB = gm.PlayerA, gm.PlayerB
+	}
+	if playerID == playerA {
+		return playerB, true
+	}
+	return playerA, true
+}
+
+func broadcastGameOver(h *Hub, gameID, outcome, playerA, playerB string) {
+	msg := Message{
+		Type:    "game_over",
+		GameID:  gameID,
+		Payload: json.RawMessage(fmt.Sprintf(`{"outcome":"%s"}`, outcome)),
+	}
+	h.SendToGame(playerA, gameID, msg)
+	h.SendToGame(playerB, gameID, msg)
 }

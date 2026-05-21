@@ -43,11 +43,11 @@ export function useChessGame() {
     }
   };
 
-  const move = (from: string, to: string) => {
+  const move = (from: string, to: string, promotion: string = "q") => {
     const result = gameRef.current.move({
       from,
       to,
-      promotion: "q",
+      promotion,
     });
 
     if (!result) return;

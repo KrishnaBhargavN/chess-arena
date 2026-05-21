@@ -107,3 +107,13 @@ func (s *Session) Outcome() string {
 		return ""
 	}
 }
+
+func (s *Session) Resign(color string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if color == "white" {
+		s.game.Resign(chess.White)
+	} else {
+		s.game.Resign(chess.Black)
+	}
+}

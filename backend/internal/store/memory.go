@@ -20,6 +20,7 @@ type Store interface {
 	GetTurn(gameID string) chess.Color
 	UpdateGamePlayers(gameID, playerA, playerB, colorA, colorB string) error
 	Outcome(gameID string) string
+	Resign(gameID, by string) error
 }
 
 type playerInfo struct {
@@ -150,4 +151,29 @@ func (s *MemoryStore) Outcome(gameID string) string {
 		return ""
 	}
 	return sess.Outcome()
+}
+
+func (s *MemoryStore) Resign(gameID, by string) error {
+	s.mu.RLock()
+	sess := s.sessions[gameID]
+	p := s.players[gameID]
+	s.mu.RUnlock()
+	if sess == nil {
+		return ErrorNotFound
+	}
+
+	var color string
+	if p.playerA == by {
+		color = p.colorA
+	} else if p.playerB == by {
+		color = p.colorB
+	} else {
+		return ErrorNotFound
+	}
+
+	sess.Resign(color)
+	s.mu.Lock()
+	s.status[gameID] = "finished"
+	s.mu.Unlock()
+	return nil
 }

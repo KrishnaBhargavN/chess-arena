@@ -267,3 +267,35 @@ func (s *PostgresStore) Outcome(gameID string) string {
 	}
 	return sess.Outcome()
 }
+
+func (s *PostgresStore) Resign(gameID, by string) error {
+	sess, err := s.getOrLoadSession(gameID)
+	if err != nil {
+		return err
+	}
+
+	var playerA, playerB, colorA, colorB *string
+	err = s.db.QueryRow(context.Background(),
+		`SELECT player_a_id::text, player_b_id::text, player_a_color, player_b_color
+		 FROM games WHERE id=$1`, gameID,
+	).Scan(&playerA, &playerB, &colorA, &colorB)
+	if err != nil {
+		return err
+	}
+
+	var resignerColor string
+	if playerA != nil && *playerA == by && colorA != nil {
+		resignerColor = *colorA
+	} else if playerB != nil && *playerB == by && colorB != nil {
+		resignerColor = *colorB
+	} else {
+		return ErrorNotFound
+	}
+
+	sess.Resign(resignerColor)
+
+	_, err = s.db.Exec(context.Background(),
+		`UPDATE games SET status='finished', finished_at=NOW() WHERE id=$1`, gameID,
+	)
+	return err
+}
