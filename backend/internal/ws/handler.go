@@ -97,17 +97,23 @@ func serveGame(h *Hub, conn *websocket.Conn, st store.Store, manager *game.GameM
 
 			st.ApplyMove(msg.GameID, movePayload.Move, playerID)
 
-			g := manager.GetGame(msg.GameID)
-			if g == nil {
-				log.Println("could not get the game:", msg.GameID)
-				continue
+			var playerA, playerB string
+			if g := manager.GetGame(msg.GameID); g != nil {
+				playerA, playerB = g.PlayerA, g.PlayerB
+			} else {
+				gm, err := st.GetGame(msg.GameID)
+				if err != nil {
+					log.Println("could not get the game:", msg.GameID, err)
+					continue
+				}
+				playerA, playerB = gm.PlayerA, gm.PlayerB
 			}
 
 			var opponentID string
-			if playerID == g.PlayerA {
-				opponentID = g.PlayerB
+			if playerID == playerA {
+				opponentID = playerB
 			} else {
-				opponentID = g.PlayerA
+				opponentID = playerA
 			}
 			h.SendToGame(opponentID, msg.GameID, msg)
 

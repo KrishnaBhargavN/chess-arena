@@ -25,6 +25,53 @@ func NewPostgresStore(db *pgxpool.Pool) *PostgresStore {
 	}
 }
 
+func (s *PostgresStore) getOrLoadSession(gameID string) (*game.Session, error) {
+	s.mu.RLock()
+	sess, ok := s.sessions[gameID]
+	s.mu.RUnlock()
+	if ok {
+		return sess, nil
+	}
+
+	var exists bool
+	if err := s.db.QueryRow(context.Background(),
+		`SELECT EXISTS(SELECT 1 FROM games WHERE id=$1)`, gameID,
+	).Scan(&exists); err != nil {
+		return nil, err
+	}
+	if !exists {
+		return nil, ErrorNotFound
+	}
+
+	rows, err := s.db.Query(context.Background(),
+		`SELECT san FROM moves WHERE game_id=$1 ORDER BY ply`, gameID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	rebuilt := game.NewSession()
+	for rows.Next() {
+		var san string
+		if err := rows.Scan(&san); err != nil {
+			return nil, err
+		}
+		if _, err := rebuilt.ApplyMove(san, ""); err != nil {
+			return nil, err
+		}
+	}
+
+	s.mu.Lock()
+	if existing, ok := s.sessions[gameID]; ok {
+		rebuilt = existing
+	} else {
+		s.sessions[gameID] = rebuilt
+	}
+	s.mu.Unlock()
+	return rebuilt, nil
+}
+
 func (s *PostgresStore) CreateGame() (models.Game, error) {
 	id := uuid.NewString()
 	sess := game.NewSession()
@@ -160,11 +207,9 @@ func (s *PostgresStore) ListGames(userID string) ([]models.Game, error) {
 }
 
 func (s *PostgresStore) ApplyMove(gameID, moveStr, by string) (models.MoveRecord, error) {
-	s.mu.RLock()
-	sess, ok := s.sessions[gameID]
-	s.mu.RUnlock()
-	if !ok {
-		return models.MoveRecord{}, ErrorNotFound
+	sess, err := s.getOrLoadSession(gameID)
+	if err != nil {
+		return models.MoveRecord{}, err
 	}
 
 	rec, err := sess.ApplyMove(moveStr, by)
@@ -200,10 +245,8 @@ func (s *PostgresStore) ApplyMove(gameID, moveStr, by string) (models.MoveRecord
 }
 
 func (s *PostgresStore) GetTurn(gameID string) chess.Color {
-	s.mu.RLock()
-	sess := s.sessions[gameID]
-	s.mu.RUnlock()
-	if sess == nil {
+	sess, err := s.getOrLoadSession(gameID)
+	if err != nil || sess == nil {
 		return chess.White
 	}
 	return sess.Turn()
@@ -218,10 +261,8 @@ func (s *PostgresStore) UpdateGamePlayers(gameID, playerA, playerB, colorA, colo
 }
 
 func (s *PostgresStore) Outcome(gameID string) string {
-	s.mu.RLock()
-	sess := s.sessions[gameID]
-	s.mu.RUnlock()
-	if sess == nil {
+	sess, err := s.getOrLoadSession(gameID)
+	if err != nil || sess == nil {
 		return ""
 	}
 	return sess.Outcome()

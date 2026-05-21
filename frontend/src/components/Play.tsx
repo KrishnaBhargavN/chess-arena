@@ -8,6 +8,15 @@ import { useChessGame } from "../hooks/useChessGame";
 import { useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import type { Color } from "chessground/types";
+import { ReconnectingWebSocket } from "../lib/reconnectingWebSocket";
+import { api } from "../context/AuthContext";
+
+interface ServerMove {
+  ply: number;
+  san: string;
+  from: string;
+  to: string;
+}
 
 export default function Play() {
   const { game, fen, pgn, move, reset, undo, status } = useChessGame();
@@ -15,30 +24,44 @@ export default function Play() {
   const stored = localStorage.getItem(`color_${gameId}`);
   const orientation: Color = stored === "black" ? "black" : "white";
   const [, setTurnColor] = useState<string>("white");
-  const gameWsRef = useRef<WebSocket | null>(null);
+  const gameWsRef = useRef<ReconnectingWebSocket | null>(null);
 
   useEffect(() => {
     if (!gameId) return;
 
-    const ws = new WebSocket("ws://localhost:8080/ws");
-    gameWsRef.current = ws;
-
-    ws.onopen = () => {
-      ws.send(JSON.stringify({ type: "auth", payload: { gameId } }));
-    };
-
-    ws.onmessage = (event) => {
-      const data = JSON.parse(event.data);
-      if (data.type === "move") {
-        move(data.payload.from, data.payload.to);
-        setTurnColor((t) => (t === "white" ? "black" : "white"));
+    const resync = async () => {
+      try {
+        const res = await api.get<{ moves: ServerMove[] }>(`/games/${gameId}`);
+        const serverMoves = res.data.moves ?? [];
+        const localCount = game.history().length;
+        for (let i = localCount; i < serverMoves.length; i++) {
+          move(serverMoves[i].from, serverMoves[i].to);
+        }
+      } catch (err) {
+        console.error("resync failed:", err);
       }
     };
 
-    ws.onclose = () => console.log("game ws disconnected");
-    ws.onerror = (err) => console.error("game ws error:", err);
+    const ws = new ReconnectingWebSocket("ws://localhost:8080/ws", {
+      onOpen: () => {
+        ws.send(JSON.stringify({ type: "auth", payload: { gameId } }));
+        resync();
+      },
+      onMessage: (event) => {
+        const data = JSON.parse(event.data);
+        if (data.type === "move") {
+          move(data.payload.from, data.payload.to);
+          setTurnColor((t) => (t === "white" ? "black" : "white"));
+        }
+      },
+    });
+    gameWsRef.current = ws;
 
-    return () => ws.close();
+    return () => {
+      ws.close();
+      gameWsRef.current = null;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gameId]);
 
   const onMove = (from: string, to: string) => {
