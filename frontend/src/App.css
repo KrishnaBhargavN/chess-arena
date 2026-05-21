@@ -130,6 +130,115 @@ a {
   box-shadow: none;
 }
 
+/* --- Auth (Login / Register) --- */
+.auth-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: calc(100vh - 70px);
+  padding: 24px;
+  background: radial-gradient(circle at center, #302e2b 0%, #1a1917 100%);
+}
+
+.auth-card {
+  background-color: #262421;
+  border-radius: 12px;
+  padding: 2.5rem 2.25rem;
+  width: 100%;
+  max-width: 380px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.auth-brand {
+  text-align: center;
+  font-size: 2.5rem;
+  margin-bottom: 0.5rem;
+  color: #81b64c;
+}
+
+.auth-card h2 {
+  text-align: center;
+  font-size: 1.5rem;
+  margin-bottom: 1.75rem;
+  color: #fff;
+}
+
+.auth-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.auth-form input {
+  background-color: #1a1917;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: #fff;
+  padding: 0.75rem 0.9rem;
+  border-radius: 6px;
+  font-size: 0.95rem;
+  outline: none;
+  transition: border-color 0.2s ease, background-color 0.2s ease;
+}
+
+.auth-form input::placeholder {
+  color: #6b6967;
+}
+
+.auth-form input:focus {
+  border-color: #81b64c;
+  background-color: #15140f;
+}
+
+.auth-error {
+  background-color: rgba(220, 53, 69, 0.12);
+  color: #ff6b7a;
+  padding: 0.65rem 0.85rem;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  border-left: 3px solid #dc3545;
+}
+
+.btn-auth {
+  background-color: #81b64c;
+  color: #fff;
+  font-weight: bold;
+  font-size: 1rem;
+  padding: 0.85rem 1rem;
+  border-radius: 6px;
+  border: none;
+  cursor: pointer;
+  margin-top: 0.5rem;
+  box-shadow: 0 4px 0 #5c8435;
+  transition: all 0.15s ease;
+}
+
+.btn-auth:hover {
+  background-color: #92c45d;
+}
+
+.btn-auth:active {
+  transform: translateY(2px);
+  box-shadow: 0 2px 0 #5c8435;
+}
+
+.auth-footer {
+  text-align: center;
+  margin-top: 1.5rem;
+  color: #b3b3b3;
+  font-size: 0.9rem;
+}
+
+.auth-footer a {
+  color: #81b64c;
+  font-weight: 500;
+}
+
+.auth-footer a:hover {
+  color: #92c45d;
+  text-decoration: underline;
+}
+
 /* --- Responsive Design --- */
 @media (max-width: 768px) {
   .navbar {

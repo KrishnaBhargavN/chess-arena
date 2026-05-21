@@ -22,30 +22,35 @@ export default function Login() {
 
   return (
     <div className="auth-container">
-      <h2>Log In</h2>
-      <form onSubmit={handleSubmit} className="auth-form">
-        <input
-          type="text"
-          placeholder="Username"
-          value={username}
-          onChange={(e) => setUsername(e.target.value)}
-          required
-        />
-        <input
-          type="password"
-          placeholder="Password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          required
-        />
-        {error && <p className="auth-error">{error}</p>}
-        <button type="submit" className="btn btn-play">
-          Log In
-        </button>
-      </form>
-      <p>
-        Don't have an account? <Link to="/register">Sign up</Link>
-      </p>
+      <div className="auth-card">
+        <div className="auth-brand">♞</div>
+        <h2>Welcome back</h2>
+        <form onSubmit={handleSubmit} className="auth-form">
+          <input
+            type="text"
+            placeholder="Username"
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            autoComplete="username"
+            required
+          />
+          <input
+            type="password"
+            placeholder="Password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            autoComplete="current-password"
+            required
+          />
+          {error && <p className="auth-error">{error}</p>}
+          <button type="submit" className="btn-auth">
+            Log In
+          </button>
+        </form>
+        <p className="auth-footer">
+          Don't have an account? <Link to="/register">Sign up</Link>
+        </p>
+      </div>
     </div>
   );
 }
