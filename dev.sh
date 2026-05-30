@@ -21,6 +21,11 @@ until docker compose exec -T postgres pg_isready -U gochess >/dev/null 2>&1; do
   sleep 1
 done
 
+if [ ! -d frontend/node_modules ]; then
+  echo "[dev] installing frontend dependencies (first run)..."
+  (cd frontend && npm install)
+fi
+
 echo "[dev] starting backend on :8080"
 (cd backend && DATABASE_URL="$DATABASE_URL" go run ./cmd/server) &
 
