@@ -3,7 +3,14 @@
 
 set -e
 
-DATABASE_URL="postgres://gochess:gochess@localhost:5432/gochess"
+# Load backend env (gitignored) if present, then fall back to dev defaults.
+set -a
+[ -f backend/configs/.env ] && . backend/configs/.env
+set +a
+: "${DATABASE_URL:=postgres://gochess:gochess@localhost:5432/gochess}"
+: "${JWT_SECRET:=dev-secret-not-for-production-0123456789abcd}"
+: "${COOKIE_SECURE:=false}"
+export DATABASE_URL JWT_SECRET COOKIE_SECURE
 
 cleanup() {
   echo ""
@@ -27,7 +34,7 @@ if [ ! -d frontend/node_modules ]; then
 fi
 
 echo "[dev] starting backend on :8080"
-(cd backend && DATABASE_URL="$DATABASE_URL" go run ./cmd/server) &
+(cd backend && go run ./cmd/server) &
 
 echo "[dev] starting frontend on :5173"
 (cd frontend && npm run dev) &

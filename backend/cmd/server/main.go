@@ -68,11 +68,14 @@ func main() {
 	authHandler := auth.NewHandler(userStore)
 	api := handlers.NewApi(st, logger, q, hub, manager)
 
+	// Throttle auth endpoints per client IP to slow down brute-force attempts.
+	authLimiter := auth.NewRateLimiter(0.5, 5)
+
 	mux := http.NewServeMux()
 
 	// Auth routes (public)
-	mux.HandleFunc("/auth/register", authHandler.Register)
-	mux.HandleFunc("/auth/login", authHandler.Login)
+	mux.Handle("/auth/register", authLimiter.Limit(http.HandlerFunc(authHandler.Register)))
+	mux.Handle("/auth/login", authLimiter.Limit(http.HandlerFunc(authHandler.Login)))
 	mux.HandleFunc("/auth/logout", authHandler.Logout)
 	mux.HandleFunc("/auth/me", authHandler.Me)
 

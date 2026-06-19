@@ -2,7 +2,9 @@ package auth
 
 import (
 	"errors"
+	"log"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -10,8 +12,22 @@ import (
 
 const cookieName = "auth_token"
 
-// jwtSecret should be set via environment variable in production.
-var jwtSecret = []byte("change-me-in-production")
+// jwtSecret signs and verifies auth tokens. It comes from JWT_SECRET and the
+// process refuses to start without a sufficiently long one.
+var jwtSecret = loadJWTSecret()
+
+func loadJWTSecret() []byte {
+	secret := os.Getenv("JWT_SECRET")
+	if len(secret) < 32 {
+		log.Fatal("JWT_SECRET must be set to at least 32 characters")
+	}
+	return []byte(secret)
+}
+
+// cookieSecure controls the Secure flag on the auth cookie. We can't infer HTTPS
+// from r.TLS because TLS is terminated upstream (e.g. a Cloudflare tunnel) before
+// requests reach us, so it's driven by COOKIE_SECURE instead.
+var cookieSecure = os.Getenv("COOKIE_SECURE") == "true"
 
 type Claims struct {
 	UserID   string `json:"userId"`
@@ -54,6 +70,7 @@ func SetAuthCookie(w http.ResponseWriter, token string) {
 		Value:    token,
 		Path:     "/",
 		HttpOnly: true,
+		Secure:   cookieSecure,
 		SameSite: http.SameSiteLaxMode,
 		MaxAge:   86400,
 	})
@@ -65,6 +82,8 @@ func ClearAuthCookie(w http.ResponseWriter) {
 		Value:    "",
 		Path:     "/",
 		HttpOnly: true,
+		Secure:   cookieSecure,
+		SameSite: http.SameSiteLaxMode,
 		MaxAge:   -1,
 	})
 }

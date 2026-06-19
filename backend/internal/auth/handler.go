@@ -6,6 +6,8 @@ import (
 	"net/http"
 )
 
+const maxBodyBytes = 4 << 10 // 4 KiB; auth payloads are tiny
+
 type Handler struct {
 	store UserStorer
 }
@@ -20,6 +22,7 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	r.Body = http.MaxBytesReader(w, r.Body, maxBodyBytes)
 	var body struct {
 		Username string `json:"username"`
 		Password string `json:"password"`
@@ -55,6 +58,7 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	r.Body = http.MaxBytesReader(w, r.Body, maxBodyBytes)
 	var body struct {
 		Username string `json:"username"`
 		Password string `json:"password"`

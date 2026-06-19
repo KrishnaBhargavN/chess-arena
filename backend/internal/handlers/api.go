@@ -190,6 +190,7 @@ func (a *API) MakeMove(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<10)
 	var payload struct {
 		Move string `json:"move"`
 	}

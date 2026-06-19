@@ -132,7 +132,12 @@ func (s *MemoryStore) ApplyMove(gameID, moveStr, by string) (models.MoveRecord, 
 }
 
 func (s *MemoryStore) GetTurn(gameID string) chess.Color {
+	s.mu.RLock()
 	sess := s.sessions[gameID]
+	s.mu.RUnlock()
+	if sess == nil {
+		return chess.White
+	}
 	return sess.Turn()
 }
 

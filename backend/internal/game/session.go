@@ -85,8 +85,10 @@ func (s *Session) ApplyMove(moveStr string, by string) (models.MoveRecord, error
 }
 
 func (s *Session) Turn() chess.Color {
-	moves := s.game.Moves()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
+	moves := s.game.Moves()
 	if len(moves)%2 == 0 {
 		return chess.White
 	}

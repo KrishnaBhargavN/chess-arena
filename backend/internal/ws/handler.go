@@ -8,9 +8,15 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+	"github.com/notnil/chess"
 	"krishna.com/go-chess-backend/internal/auth"
 	"krishna.com/go-chess-backend/internal/game"
 	"krishna.com/go-chess-backend/internal/store"
+)
+
+const (
+	pongWait   = 70 * time.Second
+	pingPeriod = 45 * time.Second
 )
 
 var upgrader = websocket.Upgrader{
@@ -35,6 +41,8 @@ func ServeWS(h *Hub, w http.ResponseWriter, r *http.Request, st store.Store, man
 		return
 	}
 
+	conn.SetReadLimit(1024) // cap the handshake message; raised for game play below
+
 	var initMsg Message
 	if err := conn.ReadJSON(&initMsg); err != nil {
 		_ = conn.Close()
@@ -51,11 +59,15 @@ func ServeWS(h *Hub, w http.ResponseWriter, r *http.Request, st store.Store, man
 	}
 	json.Unmarshal(initMsg.Payload, &payload)
 
-	_ = conn.SetReadDeadline(time.Now().Add(24 * time.Hour))
+	_ = conn.SetReadDeadline(time.Now().Add(pongWait))
 	conn.SetPongHandler(func(string) error {
-		_ = conn.SetReadDeadline(time.Now().Add(24 * time.Hour))
+		_ = conn.SetReadDeadline(time.Now().Add(pongWait))
 		return nil
 	})
+
+	done := make(chan struct{})
+	go pingLoop(conn, done)
+	defer close(done)
 
 	if payload.GameID == "" {
 		serveLobby(h, conn, playerID)
@@ -90,12 +102,23 @@ func serveGame(h *Hub, conn *websocket.Conn, st store.Store, manager *game.GameM
 		}
 
 		if msg.Type == "move" {
-			log.Println("move message", msg)
 			var movePayload MovePayload
-			json.Unmarshal(msg.Payload, &movePayload)
-			log.Println("move:", movePayload.Move)
+			if err := json.Unmarshal(msg.Payload, &movePayload); err != nil {
+				continue
+			}
 
-			st.ApplyMove(msg.GameID, movePayload.Move, playerID)
+			color, ok := playerColor(manager, st, msg.GameID, playerID)
+			if !ok {
+				continue
+			}
+			if !isPlayersTurn(st.GetTurn(msg.GameID), color) {
+				log.Println("ws move: out of turn", playerID, msg.GameID)
+				continue
+			}
+			if _, err := st.ApplyMove(msg.GameID, movePayload.Move, playerID); err != nil {
+				log.Println("ws move: rejected:", err)
+				continue
+			}
 
 			opponentID, ok := opponentOf(manager, st, msg.GameID, playerID)
 			if !ok {
@@ -121,6 +144,36 @@ func serveGame(h *Hub, conn *websocket.Conn, st store.Store, manager *game.GameM
 			broadcastGameOver(h, msg.GameID, outcome, playerID, opponentID)
 		}
 	}
+}
+
+func playerColor(manager *game.GameManager, st store.Store, gameID, playerID string) (string, bool) {
+	if g := manager.GetGame(gameID); g != nil {
+		switch playerID {
+		case g.PlayerA:
+			return g.PlayerAColor, true
+		case g.PlayerB:
+			return g.PlayerBColor, true
+		}
+		return "", false
+	}
+	g, err := st.GetGame(gameID)
+	if err != nil {
+		return "", false
+	}
+	switch playerID {
+	case g.PlayerA:
+		return g.PlayerAColor, true
+	case g.PlayerB:
+		return g.PlayerBColor, true
+	}
+	return "", false
+}
+
+func isPlayersTurn(turn chess.Color, color string) bool {
+	if turn == chess.White {
+		return color == "white"
+	}
+	return color == "black"
 }
 
 func opponentOf(manager *game.GameManager, st store.Store, gameID, playerID string) (string, bool) {
@@ -149,4 +202,23 @@ func broadcastGameOver(h *Hub, gameID, outcome, playerA, playerB string) {
 	}
 	h.SendToGame(playerA, gameID, msg)
 	h.SendToGame(playerB, gameID, msg)
+}
+
+// pingLoop keeps the connection alive by sending a WebSocket ping on a timer.
+// Cloudflare drops idle WS connections, and WriteControl is safe to call
+// concurrently with the hub's normal writes.
+func pingLoop(conn *websocket.Conn, done <-chan struct{}) {
+	ticker := time.NewTicker(pingPeriod)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-done:
+			return
+		case <-ticker.C:
+			deadline := time.Now().Add(10 * time.Second)
+			if err := conn.WriteControl(websocket.PingMessage, nil, deadline); err != nil {
+				return
+			}
+		}
+	}
 }
