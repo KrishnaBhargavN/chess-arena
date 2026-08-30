@@ -99,11 +99,11 @@ export default function Replay() {
   });
 
   return (
-    <div style={{ display: "flex", gap: 24, padding: 24, alignItems: "flex-start" }}>
-      <div style={{ flexShrink: 0 }}>
+    <div className="board-layout">
+      <div className="board-col">
         <ChessBoard fen={fen} orientation={orientation} viewOnly />
       </div>
-      <div style={{ minWidth: 280 }}>
+      <div className="board-side">
         <h3 style={{ margin: 0 }}>Replay</h3>
         <div style={{ fontSize: 13, color: "#666", marginBottom: 12 }}>
           Ply {currentPly} / {totalPly} · status: {data.status}

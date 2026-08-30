@@ -29,6 +29,9 @@ _testmain.go
 *.test
 *.prof
 
+# Compiled prod binary (from prod.sh)
+/bin/
+
 # Go workspace file
 go.work
 go.work.sum

@@ -15,8 +15,8 @@ export DATABASE_URL JWT_SECRET COOKIE_SECURE
 cleanup() {
   echo ""
   echo "[dev] shutting down..."
-  kill 0
   docker compose down
+  kill 0
 }
 trap cleanup EXIT
 

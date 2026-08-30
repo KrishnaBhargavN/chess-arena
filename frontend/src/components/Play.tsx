@@ -10,6 +10,7 @@ import { useParams } from "react-router-dom";
 import type { Color } from "chessground/types";
 import type { Square } from "chess.js";
 import { ReconnectingWebSocket } from "../lib/reconnectingWebSocket";
+import { wsUrl } from "../lib/wsUrl";
 import { api } from "../context/AuthContext";
 
 interface ServerMove {
@@ -48,7 +49,7 @@ export default function Play() {
       }
     };
 
-    const ws = new ReconnectingWebSocket("ws://localhost:8080/ws", {
+    const ws = new ReconnectingWebSocket(wsUrl("/api/ws"), {
       onOpen: () => {
         ws.send(JSON.stringify({ type: "auth", payload: { gameId } }));
         resync();
@@ -117,13 +118,13 @@ export default function Play() {
   };
 
   return (
-    <div style={{ display: "flex", gap: 24, padding: 24, alignItems: "flex-start" }}>
-      <div style={{ flexShrink: 0, position: "relative" }}>
+    <div className="board-layout">
+      <div className="board-col">
         <ChessBoard game={game} fen={fen} onMove={onMove} orientation={orientation} />
         {pendingPromotion && <PromotionPicker onChoice={onPromotionChoice} color={orientation} />}
         {gameOver && <GameOverOverlay outcome={gameOver} yourColor={orientation} />}
       </div>
-      <div>
+      <div className="board-side">
         <GameInfo pgn={pgn} fen={fen} status={status} />
         <GameControls
           onReset={reset}

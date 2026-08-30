@@ -20,7 +20,7 @@ const MatchMaking: React.FC = () => {
     fetchData();
   }, []);
 
-  return <div>Waiting for other players to join...</div>;
+  return <div style={{ padding: 24, textAlign: "center", fontSize: "1.2rem" }}>Waiting for other players to join...</div>;
 };
 
 export default MatchMaking;

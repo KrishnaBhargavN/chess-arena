@@ -8,7 +8,7 @@ interface Props {
 
 export default function GameControls({ onReset, onUndo, onFlip, onResign, resignDisabled }: Props) {
   return (
-    <div style={{ display: "flex", gap: 8 }}>
+    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
       <button onClick={onReset}>New Game</button>
       <button onClick={onFlip}>Flip Board</button>
       <button onClick={onUndo}>Undo</button>

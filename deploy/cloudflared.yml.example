@@ -1,0 +1,14 @@
+# Copy to ~/.cloudflared/config.yml and fill in your tunnel ID + hostname.
+#
+# Setup once:
+#   cloudflared tunnel login
+#   cloudflared tunnel create chess        # prints TUNNEL_ID + creds file path
+#   cloudflared tunnel route dns chess play.yourdomain.com
+#   cloudflared tunnel run chess           # or: sudo cloudflared service install
+tunnel: <TUNNEL_ID>
+credentials-file: /home/krishna-bhargav-n/.cloudflared/<TUNNEL_ID>.json
+
+ingress:
+  - hostname: play.yourdomain.com
+    service: http://localhost:8081
+  - service: http_status:404

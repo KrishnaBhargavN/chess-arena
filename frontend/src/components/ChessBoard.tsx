@@ -75,5 +75,5 @@ export default function ChessBoard({ fen, onMove, game, orientation, viewOnly }:
     return () => window.removeEventListener("resize", onResize);
   }, []);
 
-  return <div ref={boardRef} style={{ width: 560, height: 560, flexShrink: 0 }}></div>;
+  return <div ref={boardRef} style={{ width: "min(92vw, 560px)", height: "min(92vw, 560px)" }}></div>;
 }

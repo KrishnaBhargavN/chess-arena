@@ -43,7 +43,8 @@ export default function GamesList() {
   return (
     <div style={{ padding: 24 }}>
       <h2>My Games</h2>
-      <table style={{ width: "100%", borderCollapse: "collapse", marginTop: 16 }}>
+      <div style={{ overflowX: "auto" }}>
+        <table style={{ width: "100%", minWidth: 560, borderCollapse: "collapse", marginTop: 16 }}>
         <thead>
           <tr style={{ textAlign: "left", borderBottom: "1px solid #ccc" }}>
             <th style={{ padding: 8 }}>Date</th>
@@ -79,6 +80,7 @@ export default function GamesList() {
           })}
         </tbody>
       </table>
+      </div>
     </div>
   );
 }

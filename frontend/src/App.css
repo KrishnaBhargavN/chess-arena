@@ -239,6 +239,24 @@ a {
   text-decoration: underline;
 }
 
+/* --- Game / Replay board layout --- */
+.board-layout {
+  display: flex;
+  gap: 24px;
+  padding: 24px;
+  align-items: flex-start;
+}
+
+.board-col {
+  position: relative; /* anchors the promotion + game-over overlays */
+  flex-shrink: 0;
+}
+
+.board-side {
+  min-width: 280px;
+  overflow-wrap: anywhere; /* long FEN/PGN strings wrap instead of overflowing */
+}
+
 /* --- Responsive Design --- */
 @media (max-width: 768px) {
   .navbar {
@@ -246,7 +264,21 @@ a {
     gap: 15px;
     padding: 1rem;
   }
+  .nav-links {
+    flex-wrap: wrap;
+    justify-content: center;
+  }
   .hero h1 {
     font-size: 2.5rem;
+  }
+  .board-layout {
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+    padding: 12px;
+  }
+  .board-side {
+    min-width: 0;
+    width: 100%;
   }
 }

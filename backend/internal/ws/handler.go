@@ -19,11 +19,20 @@ const (
 	pingPeriod = 45 * time.Second
 )
 
+var allowedOrigin = "http://localhost:5173"
+
+// SetAllowedOrigin sets the Origin the WS upgrade accepts; called once from main.
+func SetAllowedOrigin(origin string) {
+	if origin != "" {
+		allowedOrigin = origin
+	}
+}
+
 var upgrader = websocket.Upgrader{
 	ReadBufferSize:  1024,
 	WriteBufferSize: 1024,
 	CheckOrigin: func(r *http.Request) bool {
-		return r.Header.Get("Origin") == "http://localhost:5173"
+		return r.Header.Get("Origin") == allowedOrigin
 	},
 }
 

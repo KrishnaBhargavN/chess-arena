@@ -1,0 +1,17 @@
+# Production reverse proxy. cloudflared points at http://localhost:8081;
+# Cloudflare terminates TLS at the edge, so this serves plain HTTP on loopback.
+:8081 {
+	bind 127.0.0.1
+
+	handle /api/* {            # API + WebSocket → Go backend
+		reverse_proxy localhost:8080
+	}
+	handle /healthz {          # health check → backend
+		reverse_proxy localhost:8080
+	}
+	handle {                   # everything else → the SPA
+		root * frontend/dist
+		try_files {path} /index.html
+		file_server
+	}
+}

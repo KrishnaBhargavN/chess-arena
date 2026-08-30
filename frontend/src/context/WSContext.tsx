@@ -8,6 +8,7 @@ import React, {
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "./AuthContext";
 import { ReconnectingWebSocket } from "../lib/reconnectingWebSocket";
+import { wsUrl } from "../lib/wsUrl";
 
 const WSContext = createContext<RefObject<ReconnectingWebSocket | null> | null>(null);
 
@@ -21,7 +22,7 @@ export function WSProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!user) return;
 
-    const ws = new ReconnectingWebSocket("ws://localhost:8080/ws", {
+    const ws = new ReconnectingWebSocket(wsUrl("/api/ws"), {
       onOpen: () => {
         ws.send(JSON.stringify({ type: "auth", payload: {} }));
       },

@@ -18,7 +18,7 @@ import (
 	"krishna.com/go-chess-backend/internal/ws"
 )
 
-const frontendOrigin = "http://localhost:5173"
+var frontendOrigin = "http://localhost:5173"
 
 func corsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -39,8 +39,14 @@ func corsMiddleware(next http.Handler) http.Handler {
 func main() {
 	logger := log.New(os.Stdout, "", log.LstdFlags)
 
+	if origin := os.Getenv("ALLOWED_ORIGIN"); origin != "" {
+		frontendOrigin = origin
+	}
+	ws.SetAllowedOrigin(frontendOrigin)
+
 	var st store.Store
 	var userStore auth.UserStorer
+	var dbPing func(context.Context) error
 
 	if dbURL := os.Getenv("DATABASE_URL"); dbURL != "" {
 		pool, err := db.Connect(dbURL)
@@ -54,6 +60,7 @@ func main() {
 		}
 
 		logger.Println("connected to postgres")
+		dbPing = pool.Ping
 		st = store.NewPostgresStore(pool)
 		userStore = auth.NewPostgresUserStore(pool)
 	} else {
@@ -114,9 +121,25 @@ func main() {
 		ws.ServeWS(hub, w, r, st, manager)
 	})
 
+	// Root mux: health check at the root, the API under /api.
+	root := http.NewServeMux()
+	root.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
+		if dbPing != nil {
+			ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
+			defer cancel()
+			if err := dbPing(ctx); err != nil {
+				http.Error(w, "db unavailable", http.StatusServiceUnavailable)
+				return
+			}
+		}
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("ok"))
+	})
+	root.Handle("/api/", http.StripPrefix("/api", mux))
+
 	srv := &http.Server{
 		Addr:         ":8080",
-		Handler:      corsMiddleware(mux),
+		Handler:      corsMiddleware(root),
 		ReadTimeout:  5 * time.Second,
 		WriteTimeout: 10 * time.Second,
 		IdleTimeout:  60 * time.Second,
