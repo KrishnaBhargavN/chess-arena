@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -33,6 +34,27 @@ func corsMiddleware(next http.Handler) http.Handler {
 		}
 
 		next.ServeHTTP(w, r)
+	})
+}
+
+func getenv(key, fallback string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return fallback
+}
+
+// spaHandler serves the built frontend: a real file if it exists, otherwise
+// index.html so client-side routes (/games, /play/:id, ...) work on refresh.
+func spaHandler(dir string) http.Handler {
+	fs := http.FileServer(http.Dir(dir))
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		p := filepath.Join(dir, filepath.Clean(r.URL.Path))
+		if info, err := os.Stat(p); err == nil && !info.IsDir() {
+			fs.ServeHTTP(w, r)
+			return
+		}
+		http.ServeFile(w, r, filepath.Join(dir, "index.html"))
 	})
 }
 
@@ -137,8 +159,13 @@ func main() {
 	})
 	root.Handle("/api/", http.StripPrefix("/api", mux))
 
+	// Serve the built frontend (SPA) for everything not under /api or /healthz.
+	root.Handle("/", spaHandler(getenv("STATIC_DIR", "frontend/dist")))
+
+	port := getenv("PORT", "8080")
+
 	srv := &http.Server{
-		Addr:         ":8080",
+		Addr:         ":" + port,
 		Handler:      corsMiddleware(root),
 		ReadTimeout:  5 * time.Second,
 		WriteTimeout: 10 * time.Second,
