@@ -62,9 +62,14 @@ About 3,000 lines of real code: ~1,900 Go (backend) and ~1,100 TypeScript/React 
   WebSocket ── /api/ws ◀═══════════▶  ws.Hub (lobby + game conns)
 ```
 
-**Try it:**
-- [ ] Run `./dev.sh`, open http://localhost:5173 in a normal window and an incognito window.
+**Try it (live site):** the app is deployed, so start there.
+- [ ] Open your live URL in a normal window and an incognito window.
 - [ ] Register two users, click **Play** in both, play a few moves, refresh mid-game, resign.
+- [ ] Visit `<your-url>/healthz`. You should see `ok`, which means the server is up and can reach Postgres.
+
+**Try it (local):** you'll need this for every "break it and watch" exercise later, because you
+can't safely experiment on the live site.
+- [ ] Run `./dev.sh`, open http://localhost:5173 in two browsers, and repeat the steps above.
 - [ ] Watch the backend terminal output while you do it.
 
 **Check yourself:**
@@ -331,7 +336,16 @@ About 3,000 lines of real code: ~1,900 Go (backend) and ~1,100 TypeScript/React 
 
 ## Stage 9: Build & deployment
 
-**Goal:** Understand how this runs on a laptop vs. in production.
+**Goal:** Understand how this runs on a laptop vs. in production, and be able to explain
+exactly how *your* live deployment works.
+
+**First, figure out which setup is live.** The repo contains two:
+- **Docker / cloud** (newest commit, `a63f7d6`): one container, where the Go binary serves the
+  API, the WebSocket, and the built frontend. Postgres is a separate service.
+- **Self-hosted** (`8f5283e`): `prod.sh` on your own machine. Caddy serves the frontend and
+  proxies `/api`, and a Cloudflare tunnel exposes it to the internet.
+
+Write down which one you're on, where Postgres lives, and where the env vars are set.
 
 **Read:**
 1. `frontend/vite.config.ts`: dev proxy `/api` → `:8080` (with `ws: true`)
@@ -352,9 +366,17 @@ About 3,000 lines of real code: ~1,900 Go (backend) and ~1,100 TypeScript/React 
 1. In dev, the browser is on `:5173` but the API is on `:8080`. Why don't cookies or CORS break?
 2. What would go wrong if `ALLOWED_ORIGIN` didn't match the real site URL in production?
 
+3. How does a WebSocket survive the trip through your host's proxy? Why does the server ping
+   every 45s? (See `pingLoop` in `ws/handler.go`.)
+4. If your host restarts the container mid-game, what is lost and what survives? (Combine Stage 3
+   and the "Known limitations" in `README.md`.)
+
 **Try it:**
 - [ ] `docker build -t chess-arena .` and run it with `-e JWT_SECRET=... -p 8080:8080`, then
-  open http://localhost:8080.
+  open http://localhost:8080. This is the same image your host runs.
+- [ ] On the live site, open DevTools: check the WebSocket URL is `wss://` (not `ws://`) and the
+  `auth_token` cookie has the `Secure` flag. If either is wrong, revisit `COOKIE_SECURE` / `wsUrl.ts`.
+- [ ] Find where your host shows server logs. Play a move on the live site and find the log line.
 
 ---
 
