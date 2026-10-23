@@ -1,0 +1,1706 @@
+<title>How Chess Arena Works</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: sticky "depth gauge" sidebar listing layers 0-10 beside one reading column; layers stack top to bottom, each one deeper. */
+:root {
+  --bg: #f4f5f1;
+  --surface: #ffffff;
+  --sunk: #eaece6;
+  --fg: #1b1f1a;
+  --muted: #586055;
+  --line: #d6dad1;
+  --line-strong: #959d8f;
+  --accent: #2e6a3a;
+  --accent-soft: #e0eadc;
+  --warm: #8f5f33;
+  --warm-soft: #f2e6d8;
+  --sev-security: #a3322b;
+  --sev-bug: #8c560f;
+  --sev-limit: #3f5089;
+  --sev-tidy: #586055;
+  --font-display: "Bricolage Grotesque", "Avenir Next", "Segoe UI", system-ui, sans-serif;
+  --font-body: "Atkinson Hyperlegible", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #121511; --surface: #1a1e19; --sunk: #0d100c; --fg: #e4e8e0; --muted: #a0a89b;
+    --line: #2c3229; --line-strong: #5d6759; --accent: #8cc394; --accent-soft: #1d3221;
+    --warm: #d6a676; --warm-soft: #33281d;
+    --sev-security: #f08a80; --sev-bug: #e3ab5d; --sev-limit: #a4b4ea; --sev-tidy: #a0a89b;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #121511; --surface: #1a1e19; --sunk: #0d100c; --fg: #e4e8e0; --muted: #a0a89b;
+  --line: #2c3229; --line-strong: #5d6759; --accent: #8cc394; --accent-soft: #1d3221;
+  --warm: #d6a676; --warm-soft: #33281d;
+  --sev-security: #f08a80; --sev-bug: #e3ab5d; --sev-limit: #a4b4ea; --sev-tidy: #a0a89b;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+@media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth; } }
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-body);
+  font-size: 17px;
+  line-height: 1.62;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 0;
+}
+a { color: var(--accent); text-underline-offset: 3px; }
+a:focus-visible, button:focus-visible, input:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 3px; }
+code, kbd { font-family: var(--font-mono); font-size: 0.86em; }
+:not(pre) > code { background: var(--sunk); padding: 0.08em 0.35em; border-radius: 4px; overflow-wrap: anywhere; }
+strong { font-weight: 700; }
+
+.shell { display: grid; grid-template-columns: 250px minmax(0, 1fr); gap: 56px; max-width: 1160px; margin: 0 auto; }
+
+/* Sidebar: the depth gauge */
+.toc-side { position: sticky; top: env(safe-area-inset-top, 0px); align-self: start; max-height: 100vh; overflow-y: auto; padding-block: 36px 24px; }
+.toc-title { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); margin: 0 0 10px; }
+.toc-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.toc-list a { display: grid; grid-template-columns: 22px minmax(0, 1fr) 14px; gap: 8px; align-items: center; padding: 5px 8px; border-radius: 6px; color: var(--fg); text-decoration: none; font-size: 14.5px; line-height: 1.3; }
+.toc-list a:hover { background: var(--sunk); }
+.toc-list a.is-here { background: var(--accent-soft); }
+.toc-num { font-family: var(--font-mono); font-size: 12px; color: var(--muted); text-align: right; }
+.toc-tick { font-size: 12px; color: var(--accent); visibility: hidden; }
+.toc-list a.is-read .toc-tick { visibility: visible; }
+.toc-depth { display: block; height: 3px; margin-top: 4px; border-radius: 2px; background: var(--line); position: relative; overflow: hidden; }
+.toc-depth::after { content: ""; position: absolute; inset: 0 auto 0 0; width: calc(var(--d) * 10%); background: var(--warm); opacity: 0.75; }
+.toc-extra { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); display: grid; gap: 2px; }
+.toc-extra a { padding: 4px 8px 4px 38px; font-size: 14px; color: var(--muted); text-decoration: none; border-radius: 6px; }
+.toc-extra a:hover { background: var(--sunk); color: var(--fg); }
+.progress { font-family: var(--font-mono); font-size: 12px; color: var(--muted); margin: 14px 8px 0 38px; }
+
+.toc-mobile { display: none; margin: 0 0 28px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+.toc-mobile summary { cursor: pointer; padding: 12px 14px; font-weight: 700; list-style-position: inside; }
+.toc-mobile .toc-list, .toc-mobile .toc-extra { padding: 0 8px 10px; }
+.toc-mobile .progress { margin: 0 14px 12px 46px; }
+
+main { min-width: 0; max-width: 760px; padding-block: 44px 120px; }
+@media (max-width: 960px) {
+  .shell { grid-template-columns: minmax(0, 1fr); gap: 0; }
+  .toc-side { display: none; }
+  .toc-mobile { display: block; }
+  main { width: 100%; margin: 0 auto; padding-block: 24px 96px; }
+}
+
+/* Header */
+.eyebrow { font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); margin: 0 0 10px; }
+h1, h2, h3 { font-family: var(--font-display); text-wrap: balance; line-height: 1.15; margin: 0; }
+h1 { font-size: clamp(34px, 6vw, 50px); font-weight: 700; letter-spacing: -0.015em; }
+.lede { font-size: 19px; color: var(--muted); max-width: 62ch; margin: 14px 0 0; }
+.howto { margin: 30px 0 0; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 18px 22px 20px; }
+.howto h2 { font-size: 19px; margin-bottom: 8px; }
+.howto ul { margin: 0; padding-left: 20px; display: grid; gap: 4px; }
+
+/* Layers */
+section.layer { padding-top: 64px; scroll-margin-top: 12px; }
+.layer-head { display: grid; gap: 10px; margin-bottom: 22px; padding-bottom: 18px; border-bottom: 1px solid var(--line); }
+.layer-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+.gauge { display: inline-flex; gap: 2px; }
+.gauge i { width: 9px; height: 9px; background: var(--line); }
+.gauge i:nth-child(odd) { background: var(--sunk); outline: 1px solid var(--line); outline-offset: -1px; }
+.gauge i.on { background: var(--warm); outline: none; }
+h2.layer-title { font-size: clamp(27px, 4.4vw, 36px); font-weight: 700; letter-spacing: -0.01em; }
+.layer-intro { color: var(--muted); margin: 0; max-width: 66ch; }
+h3 { font-size: 22px; font-weight: 600; margin: 40px 0 10px; scroll-margin-top: 12px; }
+h4 { font-size: 17px; margin: 26px 0 6px; }
+p, ul, ol { max-width: 68ch; }
+p { margin: 0 0 14px; }
+ul, ol { padding-left: 22px; margin: 0 0 16px; }
+li { margin-bottom: 5px; }
+
+ol.steps { list-style: none; padding: 0; counter-reset: s; display: grid; gap: 10px; }
+ol.steps > li { counter-increment: s; position: relative; padding-left: 40px; min-height: 26px; margin: 0; }
+ol.steps > li::before { content: counter(s); position: absolute; left: 0; top: 1px; font-family: var(--font-mono); font-size: 13px; font-weight: 600; line-height: 1; color: var(--accent); background: var(--accent-soft); width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; }
+
+.idea { background: var(--sunk); border-radius: 10px; padding: 14px 18px; margin: 20px 0; max-width: 68ch; }
+.idea .tag { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--warm); display: block; margin-bottom: 4px; }
+.idea p:last-child, .idea ul:last-child { margin-bottom: 0; }
+
+.short { margin: 34px 0 0; border: 1.5px solid var(--accent); border-radius: 12px; padding: 16px 20px; background: var(--surface); display: grid; gap: 10px; }
+.short .tag { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--accent); }
+.short p { margin: 0; }
+.read-check { display: flex; align-items: center; gap: 8px; font-size: 14.5px; color: var(--muted); cursor: pointer; width: fit-content; }
+.read-check input { width: 17px; height: 17px; accent-color: var(--accent); margin: 0; }
+
+.follow { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 10px; font-size: 13px; }
+.follow span { color: var(--muted); font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; margin-right: 2px; }
+.follow a { font-family: var(--font-mono); font-size: 12px; padding: 2px 8px; border: 1px solid var(--line); border-radius: 999px; text-decoration: none; background: var(--bg); }
+.follow a:hover { border-color: var(--accent); }
+
+.features { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin: 18px 0; }
+@media (max-width: 640px) { .features { grid-template-columns: minmax(0, 1fr); } }
+.feature { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; display: flex; flex-direction: column; min-width: 0; }
+.feature h4 { margin: 0 0 6px; font-family: var(--font-display); font-size: 18px; font-weight: 600; }
+.feature p { margin: 0; font-size: 15.5px; }
+.feature .follow { margin-top: auto; padding-top: 12px; }
+
+.term { color: inherit; text-decoration: underline dotted var(--line-strong); text-underline-offset: 3px; }
+.term:hover { color: var(--accent); }
+
+.tbl { overflow-x: auto; margin: 16px 0 20px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: 15px; }
+th, td { text-align: left; vertical-align: top; padding: 9px 12px; border-bottom: 1px solid var(--line); }
+th { font-family: var(--font-mono); font-size: 11.5px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); font-weight: 600; background: var(--sunk); }
+tr:last-child td { border-bottom: 0; }
+td code { white-space: nowrap; }
+.yes { color: var(--accent); font-weight: 700; }
+.no { color: var(--sev-security); font-weight: 700; }
+
+pre { background: var(--sunk); border-radius: 10px; padding: 14px 16px; overflow-x: auto; font-size: 13.2px; line-height: 1.55; margin: 12px 0 16px; max-width: 100%; }
+pre code { font-size: inherit; }
+.cm { color: var(--muted); }
+.file { font-family: var(--font-mono); font-size: 12.5px; color: var(--muted); margin: 18px 0 -6px; }
+
+figure { margin: 22px 0 26px; }
+.figbox { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 16px; overflow-x: auto; }
+figcaption { font-size: 14.5px; color: var(--muted); margin-top: 10px; max-width: 68ch; }
+
+/* Diagrams */
+.dg { display: block; width: 100%; height: auto; min-width: 520px; color: var(--fg); font-family: var(--font-body); }
+.dg.sm { min-width: 440px; }
+.dg text { fill: currentColor; font-size: 13px; }
+.dg .t { font-weight: 700; }
+.dg .s { font-size: 11.5px; fill: var(--muted); }
+.dg .m { font-family: var(--font-mono); }
+.dg .acc { fill: var(--accent); }
+.dg .cap { font-family: var(--font-mono); font-size: 10.5px; letter-spacing: 0.1em; fill: var(--muted); }
+.dg .b { fill: var(--surface); stroke: var(--line-strong); stroke-width: 1.25; }
+.dg .bx { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 1.25; }
+.dg .hd { fill: var(--accent-soft); stroke: none; }
+.dg .rowline { stroke: var(--line); stroke-width: 1; }
+.dg .grp { fill: none; stroke: var(--line-strong); stroke-width: 1.25; stroke-dasharray: 6 5; }
+.dg .band { fill: var(--accent-soft); opacity: 0.6; }
+.dg .life { stroke: var(--line-strong); stroke-width: 1.25; stroke-dasharray: 3 4; }
+.dg .ln { stroke: currentColor; stroke-width: 1.4; fill: none; }
+.dg .la { stroke: var(--accent); stroke-width: 2.2; fill: none; }
+.dg .ld { stroke-dasharray: 5 4; }
+.dg .ah { fill: currentColor; }
+.dg .aha { fill: var(--accent); }
+.dg .dot { fill: var(--bg); stroke: currentColor; stroke-width: 1.4; }
+.dg .doton { fill: var(--accent); }
+
+.sev { display: inline-block; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; padding: 2px 8px; border-radius: 999px; border: 1px solid currentColor; vertical-align: 3px; margin-left: 6px; white-space: nowrap; }
+.sev.security { color: var(--sev-security); }
+.sev.bug { color: var(--sev-bug); }
+.sev.limit { color: var(--sev-limit); }
+.sev.tidy { color: var(--sev-tidy); }
+.edge { border-top: 1px solid var(--line); padding-top: 4px; }
+.edge h4 { font-family: var(--font-display); font-size: 19px; font-weight: 600; }
+.edge dl { display: grid; grid-template-columns: 110px minmax(0, 1fr); gap: 4px 14px; margin: 8px 0 18px; max-width: 68ch; }
+.edge dt { font-family: var(--font-mono); font-size: 12px; color: var(--muted); padding-top: 3px; }
+.edge dd { margin: 0; }
+@media (max-width: 560px) { .edge dl { grid-template-columns: minmax(0, 1fr); } .edge dt { padding-top: 6px; } }
+
+dl.gloss { display: grid; grid-template-columns: 170px minmax(0, 1fr); gap: 10px 18px; max-width: 72ch; }
+dl.gloss dt { font-weight: 700; scroll-margin-top: 12px; }
+dl.gloss dd { margin: 0; }
+@media (max-width: 560px) { dl.gloss { grid-template-columns: minmax(0, 1fr); gap: 2px; } dl.gloss dd { margin-bottom: 10px; } }
+.target-flash:target { background: var(--warm-soft); border-radius: 4px; }
+
+footer.end { margin-top: 64px; padding-top: 18px; border-top: 1px solid var(--line); font-size: 14px; color: var(--muted); }
+
+@media print {
+  :root, :root[data-theme="dark"] {
+    --bg: #ffffff; --surface: #ffffff; --sunk: #f0f1ed; --fg: #151915; --muted: #4f574c;
+    --line: #d3d7ce; --line-strong: #8f978a; --accent: #2a6436; --accent-soft: #e3ece0;
+    --warm: #8a5a2f; --warm-soft: #f3e8db; color-scheme: light;
+  }
+  body { font-size: 11pt; padding: 0; }
+  .shell { display: block; max-width: none; }
+  .toc-side, .toc-mobile, .read-check, .progress { display: none !important; }
+  main { max-width: none; padding: 0; }
+  section.layer { break-before: page; padding-top: 0; }
+  section.layer#layer-0 { break-before: auto; padding-top: 28px; }
+  figure, pre, .short, .idea, .feature, .tbl, .edge { break-inside: avoid; }
+  h3, h4 { break-after: avoid; }
+  pre { white-space: pre-wrap; overflow: visible; }
+  .figbox, .tbl { overflow: visible; }
+  .dg { min-width: 0; }
+  a { color: var(--fg); text-decoration: none; }
+  .follow { display: none; }
+  .print-toc { display: block !important; }
+}
+.print-toc { display: none; margin-top: 26px; }
+.print-toc ol { columns: 2; padding-left: 20px; }
+</style>
+
+<div class="shell">
+  <aside class="toc-side" aria-label="Layers">
+    <p class="toc-title">Layers · deeper as you go</p>
+    <ol class="toc-list" data-toc-list>
+      <li><a href="#layer-0" data-toc="layer-0"><span class="toc-num">0</span><span>The one-minute version<span class="toc-depth" style="--d:0"></span></span><span class="toc-tick" aria-hidden="true">✓</span></a></li>
+      <li><a href="#layer-1" data-toc="layer-1"><span class="toc-num">1</span><span>What you can do with it<span class="toc-depth" style="--d:1"></span></span><span class="toc-tick" aria-hidden="true">✓</span></a></li>
+      <li><a href="#layer-2" data-toc="layer-2"><span class="toc-num">2</span><span>The pieces<span class="toc-depth" style="--d:2"></span></span><span class="toc-tick" aria-hidden="true">✓</span></a></li>
+      <li><a href="#layer-3" data-toc="layer-3"><span class="toc-num">3</span><span>How the pieces talk<span class="toc-depth" style="--d:3"></span></span><span class="toc-tick" aria-hidden="true">✓</span></a></li>
+      <li><a href="#layer-4" data-toc="layer-4"><span class="toc-num">4</span><span>Each feature, step by step<span class="toc-depth" style="--d:4"></span></span><span class="toc-tick" aria-hidden="true">✓</span></a></li>
+      <li><a href="#layer-5" data-toc="layer-5"><span class="toc-num">5</span><span>Inside the server<span class="toc-depth" style="--d:5"></span></span><span class="toc-tick" aria-hidden="true">✓</span></a></li>
+      <li><a href="#layer-6" data-toc="layer-6"><span class="toc-num">6</span><span>Inside the browser app<span class="toc-depth" style="--d:6"></span></span><span class="toc-tick" aria-hidden="true">✓</span></a></li>
+      <li><a href="#layer-7" data-toc="layer-7"><span class="toc-num">7</span><span>The data<span class="toc-depth" style="--d:7"></span></span><span class="toc-tick" aria-hidden="true">✓</span></a></li>
+      <li><a href="#layer-8" data-toc="layer-8"><span class="toc-num">8</span><span>How it's deployed<span class="toc-depth" style="--d:8"></span></span><span class="toc-tick" aria-hidden="true">✓</span></a></li>
+      <li><a href="#layer-9" data-toc="layer-9"><span class="toc-num">9</span><span>Reading the actual code<span class="toc-depth" style="--d:9"></span></span><span class="toc-tick" aria-hidden="true">✓</span></a></li>
+      <li><a href="#layer-10" data-toc="layer-10"><span class="toc-num">10</span><span>Rough edges<span class="toc-depth" style="--d:10"></span></span><span class="toc-tick" aria-hidden="true">✓</span></a></li>
+    </ol>
+    <div class="toc-extra">
+      <a href="#where">Where do I look when…</a>
+      <a href="#glossary">Glossary</a>
+      <a href="#roadmap">Using this with the roadmap</a>
+    </div>
+    <p class="progress" data-progress>0 of 11 layers read</p>
+  </aside>
+
+  <main>
+    <header>
+      <p class="eyebrow">chess.bhargavnkrishna.site · a guide to the code</p>
+      <h1>How Chess Arena Works</h1>
+      <p class="lede">Start with the one-minute version and go one layer deeper at a time, all the way down to the code. You can stop after any layer and still have a complete picture at that depth.</p>
+
+      <details class="toc-mobile">
+        <summary>Jump to a layer</summary>
+        <ol class="toc-list">
+          <li><a href="#layer-0" data-toc="layer-0"><span class="toc-num">0</span><span>The one-minute version<span class="toc-depth" style="--d:0"></span></span><span class="toc-tick" aria-hidden="true">✓</span></a></li>
+          <li><a href="#layer-1" data-toc="layer-1"><span class="toc-num">1</span><span>What you can do with it<span class="toc-depth" style="--d:1"></span></span><span class="toc-tick" aria-hidden="true">✓</span></a></li>
+          <li><a href="#layer-2" data-toc="layer-2"><span class="toc-num">2</span><span>The pieces<span class="toc-depth" style="--d:2"></span></span><span class="toc-tick" aria-hidden="true">✓</span></a></li>
+          <li><a href="#layer-3" data-toc="layer-3"><span class="toc-num">3</span><span>How the pieces talk<span class="toc-depth" style="--d:3"></span></span><span class="toc-tick" aria-hidden="true">✓</span></a></li>
+          <li><a href="#layer-4" data-toc="layer-4"><span class="toc-num">4</span><span>Each feature, step by step<span class="toc-depth" style="--d:4"></span></span><span class="toc-tick" aria-hidden="true">✓</span></a></li>
+          <li><a href="#layer-5" data-toc="layer-5"><span class="toc-num">5</span><span>Inside the server<span class="toc-depth" style="--d:5"></span></span><span class="toc-tick" aria-hidden="true">✓</span></a></li>
+          <li><a href="#layer-6" data-toc="layer-6"><span class="toc-num">6</span><span>Inside the browser app<span class="toc-depth" style="--d:6"></span></span><span class="toc-tick" aria-hidden="true">✓</span></a></li>
+          <li><a href="#layer-7" data-toc="layer-7"><span class="toc-num">7</span><span>The data<span class="toc-depth" style="--d:7"></span></span><span class="toc-tick" aria-hidden="true">✓</span></a></li>
+          <li><a href="#layer-8" data-toc="layer-8"><span class="toc-num">8</span><span>How it's deployed<span class="toc-depth" style="--d:8"></span></span><span class="toc-tick" aria-hidden="true">✓</span></a></li>
+          <li><a href="#layer-9" data-toc="layer-9"><span class="toc-num">9</span><span>Reading the actual code<span class="toc-depth" style="--d:9"></span></span><span class="toc-tick" aria-hidden="true">✓</span></a></li>
+          <li><a href="#layer-10" data-toc="layer-10"><span class="toc-num">10</span><span>Rough edges<span class="toc-depth" style="--d:10"></span></span><span class="toc-tick" aria-hidden="true">✓</span></a></li>
+        </ol>
+        <div class="toc-extra">
+          <a href="#where">Where do I look when…</a>
+          <a href="#glossary">Glossary</a>
+          <a href="#roadmap">Using this with the roadmap</a>
+        </div>
+        <p class="progress" data-progress>0 of 11 layers read</p>
+      </details>
+
+      <div class="howto">
+        <h2>How to read this</h2>
+        <ul>
+          <li><strong>Go top to bottom.</strong> Each layer zooms in one step. Layers 0–4 need no programming knowledge at all. File and function names only show up from Layer 5 on.</li>
+          <li><strong>Stop whenever you like.</strong> Every layer ends with a box called <em>The short version</em>. If you can say it back in your own words, you've got that layer.</li>
+          <li><strong>Follow one feature down.</strong> In Layer 1, each feature has <em>Follow it down</em> links that jump to the same feature in deeper layers.</li>
+          <li><strong>Dotted words</strong> like <a class="term" href="#g-websocket">WebSocket</a> link to the glossary at the end.</li>
+          <li><strong>Tick "I've read this layer"</strong> to track your progress. It's saved in this browser only.</li>
+        </ul>
+      </div>
+      <nav class="print-toc" aria-label="Contents">
+        <h2 style="font-size:20px">Contents</h2>
+        <ol start="0">
+          <li>The one-minute version</li><li>What you can do with it</li><li>The pieces</li><li>How the pieces talk</li><li>Each feature, step by step</li><li>Inside the server</li><li>Inside the browser app</li><li>The data</li><li>How it's deployed</li><li>Reading the actual code</li><li>Rough edges</li><li>Where do I look when… · Glossary · Roadmap</li>
+        </ol>
+      </nav>
+    </header>
+
+    <!-- ============================== LAYER 0 ============================== -->
+    <section class="layer" id="layer-0">
+      <div class="layer-head">
+        <div class="layer-meta"><span>Layer 0</span><span class="gauge" aria-label="depth 0 of 10"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span><span>no tech</span></div>
+        <h2 class="layer-title">The one-minute version</h2>
+      </div>
+
+      <p>Chess Arena is a website where two people play chess against each other, live. You make an account, press <strong>Play Now</strong>, and the site pairs you with whoever else is waiting. Each of you sees the board from your own side. When one of you moves, the other sees it a moment later.</p>
+      <p>When a game ends, it's saved. You can open <strong>My Games</strong> later and replay any game move by move.</p>
+      <p>It lives at <code>chess.bhargavnkrishna.site</code>. Behind it are two programs you wrote (a website and a server) and a database that remembers everything.</p>
+
+      <figure>
+        <div class="figbox">
+          <svg class="dg sm" viewBox="0 0 640 215" role="img" aria-label="Player 1 sends a move to the Chess Arena server, the server passes it to Player 2 and saves it in the database.">
+            <defs>
+              <marker id="m0a" viewBox="0 0 10 10" refX="9" refY="5" markerUnits="userSpaceOnUse" markerWidth="10" markerHeight="10" orient="auto-start-reverse"><path d="M0,0L10,5L0,10z" class="aha"/></marker>
+              <marker id="m0" viewBox="0 0 10 10" refX="9" refY="5" markerUnits="userSpaceOnUse" markerWidth="9" markerHeight="9" orient="auto-start-reverse"><path d="M0,0L10,5L0,10z" class="ah"/></marker>
+            </defs>
+            <rect class="b" x="20" y="40" width="140" height="60" rx="6"/>
+            <text x="90" y="66" text-anchor="middle" class="t">Player 1</text>
+            <text x="90" y="85" text-anchor="middle" class="s">your browser</text>
+            <rect class="bx" x="250" y="40" width="140" height="60" rx="6"/>
+            <text x="320" y="66" text-anchor="middle" class="t">Chess Arena</text>
+            <text x="320" y="85" text-anchor="middle" class="s">the server</text>
+            <rect class="b" x="480" y="40" width="140" height="60" rx="6"/>
+            <text x="550" y="66" text-anchor="middle" class="t">Player 2</text>
+            <text x="550" y="85" text-anchor="middle" class="s">their browser</text>
+            <rect class="b" x="250" y="150" width="140" height="50" rx="6"/>
+            <text x="320" y="172" text-anchor="middle" class="t">Database</text>
+            <text x="320" y="190" text-anchor="middle" class="s">remembers games</text>
+            <line class="la" x1="160" y1="70" x2="248" y2="70" marker-end="url(#m0a)"/>
+            <text x="205" y="60" text-anchor="middle" class="s">your move</text>
+            <line class="la" x1="390" y1="70" x2="478" y2="70" marker-end="url(#m0a)"/>
+            <text x="435" y="60" text-anchor="middle" class="s">shows up here</text>
+            <line class="ln" x1="320" y1="100" x2="320" y2="148" marker-end="url(#m0)"/>
+            <text x="330" y="129" class="s">saves it</text>
+          </svg>
+        </div>
+        <figcaption>The whole app in one picture: your move goes to the server, which passes it to your opponent and saves it.</figcaption>
+      </figure>
+
+      <div class="short">
+        <span class="tag">The short version</span>
+        <p>Two players, one live board, and every game is saved so you can replay it later.</p>
+        <label class="read-check"><input type="checkbox" id="read-layer-0" value="layer-0" data-layer-check> I've read this layer</label>
+      </div>
+    </section>
+
+    <!-- ============================== LAYER 1 ============================== -->
+    <section class="layer" id="layer-1">
+      <div class="layer-head">
+        <div class="layer-meta"><span>Layer 1</span><span class="gauge" aria-label="depth 1 of 10"><i class="on"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span><span>no tech</span></div>
+        <h2 class="layer-title">What you can do with it</h2>
+        <p class="layer-intro">Every feature, the way a player sees it. Each card's links follow that feature into deeper layers.</p>
+      </div>
+
+      <div class="features">
+        <article class="feature">
+          <h4>Make an account</h4>
+          <p>Sign up with a username and password, then log in and out. You stay logged in for 24 hours, even if you close the tab.</p>
+          <div class="follow"><span>Follow it down</span><a href="#l3-cookie">L3</a><a href="#l4-login">L4</a><a href="#l5-packages">L5</a><a href="#l9-middleware">L9</a></div>
+        </article>
+        <article class="feature">
+          <h4>Find an opponent</h4>
+          <p>Press <strong>Play Now</strong> and wait. As soon as someone else presses it too, you're both taken to a new game. Whoever waited longest gets matched first. Colors are random.</p>
+          <div class="follow"><span>Follow it down</span><a href="#l4-match">L4</a><a href="#l5-packages">L5</a><a href="#l9-match">L9</a></div>
+        </article>
+        <article class="feature">
+          <h4>Play live</h4>
+          <p>Drag pieces on the board. You can only move your own pieces, only to legal squares. Your opponent's moves appear on their own. A status line says whose turn it is, or that someone is in check.</p>
+          <div class="follow"><span>Follow it down</span><a href="#l4-move">L4</a><a href="#l6-game">L6</a><a href="#l9-move">L9</a></div>
+        </article>
+        <article class="feature">
+          <h4>Promote a pawn</h4>
+          <p>When your pawn reaches the last row, a picker pops up so you choose queen, rook, bishop or knight. It doesn't just assume a queen.</p>
+          <div class="follow"><span>Follow it down</span><a href="#l6-game">L6</a><a href="#l7-ws">L7</a></div>
+        </article>
+        <article class="feature">
+          <h4>Resign, and game over</h4>
+          <p>Press <strong>Resign</strong> to give up. Games also end by checkmate, stalemate and some kinds of draw. Both players see "You won", "You lost" or "Draw".</p>
+          <div class="follow"><span>Follow it down</span><a href="#l4-over">L4</a><a href="#l7-ws">L7</a><a href="#l10-draw">L10</a></div>
+        </article>
+        <article class="feature">
+          <h4>Survive hiccups</h4>
+          <p>Refresh the page, lose Wi-Fi for a bit, or even have the server restart. When you're back, the board catches up and the game carries on.</p>
+          <div class="follow"><span>Follow it down</span><a href="#l4-reconnect">L4</a><a href="#l4-restart">L4</a><a href="#l9-reconnect">L9</a><a href="#l9-rebuild">L9</a></div>
+        </article>
+        <article class="feature">
+          <h4>My Games</h4>
+          <p>A list of every game you've played: when, which color you had, who your opponent was, and whether it's finished.</p>
+          <div class="follow"><span>Follow it down</span><a href="#l4-replay">L4</a><a href="#l6-pages">L6</a><a href="#l7-http">L7</a></div>
+        </article>
+        <article class="feature">
+          <h4>Replay a game</h4>
+          <p>Open any game from My Games and step through it with buttons, the arrow keys, or by clicking a move in the list.</p>
+          <div class="follow"><span>Follow it down</span><a href="#l4-replay">L4</a><a href="#l6-pages">L6</a></div>
+        </article>
+      </div>
+
+      <div class="idea">
+        <span class="tag">Something you'll notice</span>
+        <p>If nobody has used the site for a while, the first visit can take about a minute to load. That's the server waking up from sleep, not a bug. <a href="#l8-free">Layer 8</a> explains why.</p>
+      </div>
+
+      <div class="short">
+        <span class="tag">The short version</span>
+        <p>Sign up, get matched, play live with proper promotion and resign, survive refreshes and disconnects, and replay any past game.</p>
+        <label class="read-check"><input type="checkbox" id="read-layer-1" value="layer-1" data-layer-check> I've read this layer</label>
+      </div>
+    </section>
+
+    <!-- ============================== LAYER 2 ============================== -->
+    <section class="layer" id="layer-2">
+      <div class="layer-head">
+        <div class="layer-meta"><span>Layer 2</span><span class="gauge" aria-label="depth 2 of 10"><i class="on"></i><i class="on"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span><span>very light tech</span></div>
+        <h2 class="layer-title">The pieces</h2>
+        <p class="layer-intro">Four parts make the app work. A restaurant is a handy way to picture them.</p>
+      </div>
+
+      <div class="tbl">
+        <table>
+          <thead><tr><th>Part</th><th>In the restaurant</th><th>What it really is</th></tr></thead>
+          <tbody>
+            <tr><td><strong>The browser app</strong><br><span style="color:var(--muted);font-size:13px">(the <a class="term" href="#g-frontend">frontend</a>)</span></td><td>The dining room and the menu. Everything you see and touch.</td><td>A <a class="term" href="#g-react">React</a> app written in TypeScript. It draws the board, the pages and the buttons inside your browser.</td></tr>
+            <tr><td><strong>The server</strong><br><span style="color:var(--muted);font-size:13px">(the <a class="term" href="#g-frontend">backend</a>)</span></td><td>The kitchen. It does the real work and makes the decisions.</td><td>A program written in Go. It pairs players, checks every move, passes moves along and saves everything.</td></tr>
+            <tr><td><strong>The database</strong></td><td>The pantry and the order book. Permanent memory.</td><td>A <a class="term" href="#g-postgres">Postgres</a> database hosted by <a class="term" href="#g-neon">Neon</a>. It stores users, games and every move.</td></tr>
+            <tr><td><strong>The host</strong></td><td>The building the restaurant is in.</td><td><a class="term" href="#g-render">Render</a>. It runs the server on the internet at your domain.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p>One detail makes your setup simpler than most: <strong>on Render, the browser app and the server live in the same box.</strong> The server hands out the website's files as well as answering requests. So there's one thing to deploy, one address, and no separate frontend host.</p>
+
+      <figure>
+        <div class="figbox">
+          <svg class="dg" viewBox="0 0 690 280" role="img" aria-label="Your browser talks to one Render container over HTTP and WebSocket. Inside, the Go server answers requests and hands out the website files. The Go server reads and writes the Neon Postgres database.">
+            <defs>
+              <marker id="m2" viewBox="0 0 10 10" refX="9" refY="5" markerUnits="userSpaceOnUse" markerWidth="9" markerHeight="9" orient="auto-start-reverse"><path d="M0,0L10,5L0,10z" class="ah"/></marker>
+            </defs>
+            <rect class="b" x="20" y="80" width="150" height="160" rx="6"/>
+            <text x="95" y="150" text-anchor="middle" class="t">Your browser</text>
+            <text x="95" y="170" text-anchor="middle" class="s">the React app</text>
+            <text x="95" y="186" text-anchor="middle" class="s">runs here</text>
+            <rect class="grp" x="240" y="30" width="270" height="230" rx="10"/>
+            <text x="254" y="52" class="s">Render · chess.bhargavnkrishna.site</text>
+            <rect class="bx" x="260" y="70" width="230" height="80" rx="6"/>
+            <text x="375" y="104" text-anchor="middle" class="t">Go server</text>
+            <text x="375" y="124" text-anchor="middle" class="s">API + live connections</text>
+            <rect class="b" x="260" y="180" width="230" height="60" rx="6"/>
+            <text x="375" y="206" text-anchor="middle" class="t">Website files</text>
+            <text x="375" y="224" text-anchor="middle" class="s m">frontend/dist</text>
+            <line class="ln" x1="174" y1="110" x2="256" y2="110" marker-start="url(#m2)" marker-end="url(#m2)"/>
+            <text x="215" y="100" text-anchor="middle" class="s">HTTP</text>
+            <text x="215" y="128" text-anchor="middle" class="s">WebSocket</text>
+            <line class="ln" x1="375" y1="150" x2="375" y2="177" marker-end="url(#m2)"/>
+            <text x="385" y="168" class="s">reads files</text>
+            <rect class="b" x="560" y="70" width="115" height="80" rx="6"/>
+            <text x="617" y="104" text-anchor="middle" class="t">Neon</text>
+            <text x="617" y="124" text-anchor="middle" class="s">Postgres</text>
+            <line class="ln" x1="494" y1="110" x2="556" y2="110" marker-start="url(#m2)" marker-end="url(#m2)"/>
+            <text x="525" y="100" text-anchor="middle" class="s">SQL</text>
+          </svg>
+        </div>
+        <figcaption>Your browser only ever talks to one place: the Render container at your domain. Only the Go server talks to the database.</figcaption>
+      </figure>
+
+      <h3>Who's responsible for what</h3>
+      <ul>
+        <li><strong>The browser app</strong> draws the board, only lets you drag pieces to legal squares, shows the status line, and remembers which color you are.</li>
+        <li><strong>The server</strong> keeps the waiting line, pairs players, checks that every move is legal and that it's your turn, passes moves to your opponent, and saves everything.</li>
+        <li><strong>The database</strong> holds three things: users, games and moves.</li>
+      </ul>
+
+      <div class="idea">
+        <span class="tag">Key idea · the server is the referee</span>
+        <p>Both the browser app and the server know the rules of chess. The browser uses them for convenience, so you can't drag a knight in a straight line. The server's check is the one that counts. If someone tampered with their browser to send a cheating move, the server would refuse it.</p>
+      </div>
+
+      <div class="idea">
+        <span class="tag">Key idea · two kinds of memory</span>
+        <p>The server keeps some things in its own short-term memory (fast, but forgotten when it restarts) and some in the database (slower, but permanent). Knowing which is which explains most of the app's behavior. <a href="#l5-memory">Layer 5</a> has the full list.</p>
+      </div>
+
+      <div class="short">
+        <span class="tag">The short version</span>
+        <p>A React app in your browser, a Go server that acts as the referee, a Neon database for permanent memory, and Render running the server, which also hands out the website.</p>
+        <label class="read-check"><input type="checkbox" id="read-layer-2" value="layer-2" data-layer-check> I've read this layer</label>
+      </div>
+    </section>
+
+    <!-- ============================== LAYER 3 ============================== -->
+    <section class="layer" id="layer-3">
+      <div class="layer-head">
+        <div class="layer-meta"><span>Layer 3</span><span class="gauge" aria-label="depth 3 of 10"><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span><span>light tech</span></div>
+        <h2 class="layer-title">How the pieces talk</h2>
+        <p class="layer-intro">The browser and the server talk in two different ways. You also need to know how the server knows who you are.</p>
+      </div>
+
+      <h3 id="l3-two-ways">Two ways to talk</h3>
+      <p><strong><a class="term" href="#g-http">HTTP</a> is like sending a letter.</strong> The browser asks a question, the server sends one reply, and that conversation is over. It's used for things you ask for: sign up, log in, "who am I?", "put me in the waiting line", "show me my games".</p>
+      <p><strong><a class="term" href="#g-websocket">WebSocket</a> is like a phone call that stays open.</strong> Once connected, either side can talk at any moment. It's used for things that happen to you: "your opponent moved", "you've been matched", "game over".</p>
+      <p>Why both? With HTTP, the server can only <em>answer</em>. It can't call you. But when your opponent moves, nobody on your side asked a question. The server needs to speak first, and only the open phone line allows that.</p>
+
+      <figure>
+        <div class="figbox">
+          <svg class="dg" viewBox="0 0 680 255" role="img" aria-label="Left: with HTTP the browser sends a request and gets one reply, then the exchange is over. Right: with a WebSocket the line stays open and the server can send messages like match_found and the opponent's move without being asked.">
+            <defs>
+              <marker id="m3" viewBox="0 0 10 10" refX="9" refY="5" markerUnits="userSpaceOnUse" markerWidth="9" markerHeight="9" orient="auto-start-reverse"><path d="M0,0L10,5L0,10z" class="ah"/></marker>
+              <marker id="m3a" viewBox="0 0 10 10" refX="9" refY="5" markerUnits="userSpaceOnUse" markerWidth="10" markerHeight="10" orient="auto-start-reverse"><path d="M0,0L10,5L0,10z" class="aha"/></marker>
+            </defs>
+            <text x="20" y="20" class="t">HTTP · a letter and a reply</text>
+            <rect class="b" x="20" y="32" width="80" height="26" rx="5"/><text x="60" y="50" text-anchor="middle" class="s">Browser</text>
+            <rect class="b" x="220" y="32" width="80" height="26" rx="5"/><text x="260" y="50" text-anchor="middle" class="s">Server</text>
+            <line class="life" x1="60" y1="58" x2="60" y2="245"/><line class="life" x1="260" y1="58" x2="260" y2="245"/>
+            <line class="ln" x1="62" y1="90" x2="257" y2="90" marker-end="url(#m3)"/><text x="160" y="84" text-anchor="middle" class="s m">POST /auth/login</text>
+            <line class="ln ld" x1="258" y1="122" x2="63" y2="122" marker-end="url(#m3)"/><text x="160" y="116" text-anchor="middle" class="s">reply + cookie</text>
+            <text x="160" y="153" text-anchor="middle" class="s" font-style="italic">exchange over</text>
+            <line class="ln" x1="62" y1="190" x2="257" y2="190" marker-end="url(#m3)"/><text x="160" y="184" text-anchor="middle" class="s m">GET /games</text>
+            <line class="ln ld" x1="258" y1="222" x2="63" y2="222" marker-end="url(#m3)"/><text x="160" y="216" text-anchor="middle" class="s">list of games</text>
+
+            <text x="360" y="20" class="t">WebSocket · an open phone call</text>
+            <rect class="b" x="360" y="32" width="80" height="26" rx="5"/><text x="400" y="50" text-anchor="middle" class="s">Browser</text>
+            <rect class="b" x="580" y="32" width="80" height="26" rx="5"/><text x="620" y="50" text-anchor="middle" class="s">Server</text>
+            <rect class="band" x="400" y="66" width="220" height="176"/>
+            <line class="life" x1="400" y1="58" x2="400" y2="245"/><line class="life" x1="620" y1="58" x2="620" y2="245"/>
+            <line class="ln" x1="402" y1="95" x2="617" y2="95" marker-end="url(#m3)"/><text x="510" y="89" text-anchor="middle" class="s m">auth</text>
+            <line class="la" x1="618" y1="135" x2="404" y2="135" marker-end="url(#m3a)"/><text x="510" y="129" text-anchor="middle" class="s m">match_found</text>
+            <line class="ln" x1="402" y1="175" x2="617" y2="175" marker-end="url(#m3)"/><text x="510" y="169" text-anchor="middle" class="s m">move e4</text>
+            <line class="la" x1="618" y1="215" x2="404" y2="215" marker-end="url(#m3a)"/><text x="510" y="209" text-anchor="middle" class="s">opponent's move</text>
+          </svg>
+        </div>
+        <figcaption>With HTTP the server can only answer. With a WebSocket it can speak first (the green arrows), which is how your opponent's move reaches you.</figcaption>
+      </figure>
+
+      <h3 id="l3-two-lines">Each player has two phone lines</h3>
+      <ul>
+        <li><strong>The lobby line</strong> is open the whole time you're logged in, on any page. It exists for one message: "you've been matched, here's your game".</li>
+        <li><strong>The game line</strong> opens when you're on a game page. It carries moves, resignations and "game over" for that one game.</li>
+      </ul>
+      <p>Both lines go to the same address on the server (<code>/api/ws</code>). The first thing the browser says on a new line tells the server which kind it is.</p>
+
+      <h3 id="l3-cookie">The wristband: how the server knows it's you</h3>
+      <p>Think of a festival wristband. When you log in, the server gives your browser a signed pass called a <a class="term" href="#g-jwt">JWT</a>, stored in a <a class="term" href="#g-cookie">cookie</a>. It says "this is user 4f2a…, username krishna, valid until tomorrow", plus a signature only the server can make.</p>
+      <ul>
+        <li>Your browser shows the wristband automatically with every request, and when it opens a phone line.</li>
+        <li>The server checks the signature. If it's valid, the server knows who you are without looking anything up.</li>
+        <li>The cookie is <em>HttpOnly</em>: JavaScript on the page can't read it, so a malicious script can't steal it.</li>
+        <li>It expires after 24 hours. Then you log in again.</li>
+      </ul>
+      <div class="idea">
+        <span class="tag">Key idea · never trust what the browser says about itself</span>
+        <p>The server never believes a message that says "I am player X". It only believes the wristband. That's why one player can't send moves pretending to be the other.</p>
+      </div>
+
+      <h3>One address for everything</h3>
+      <p>The website, the API (<code>/api/…</code>) and the phone lines (<code>/api/ws</code>) all live at <code>chess.bhargavnkrishna.site</code>. Because everything is on one domain, the cookie just works everywhere, and there's none of the cross-site setup (<a class="term" href="#g-cors">CORS</a>) that sites with separate frontend and backend addresses need.</p>
+
+      <div class="short">
+        <span class="tag">The short version</span>
+        <p>HTTP for asking (letter and reply), WebSocket for being told (open phone line). Each player has a lobby line and a game line. A signed cookie, the wristband, proves who you are on every request.</p>
+        <label class="read-check"><input type="checkbox" id="read-layer-3" value="layer-3" data-layer-check> I've read this layer</label>
+      </div>
+    </section>
+
+    <!-- ============================== LAYER 4 ============================== -->
+    <section class="layer" id="layer-4">
+      <div class="layer-head">
+        <div class="layer-meta"><span>Layer 4</span><span class="gauge" aria-label="depth 4 of 10"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i><i></i><i></i><i></i><i></i></span><span>medium</span></div>
+        <h2 class="layer-title">Each feature, step by step</h2>
+        <p class="layer-intro">The features from Layer 1 again, now as short stories of what happens behind the scenes. Still no code.</p>
+      </div>
+
+      <h3 id="l4-login">Signing up and logging in</h3>
+      <ol class="steps">
+        <li>You type a username and password. The browser sends them to the server (<code>POST /api/auth/register</code>).</li>
+        <li>The server checks the name isn't taken. It scrambles the password with <a class="term" href="#g-bcrypt">bcrypt</a> and stores only the scrambled version, never the real password.</li>
+        <li>The server creates your wristband (the JWT, valid 24 hours) and puts it in a cookie in its reply.</li>
+        <li>The browser now knows you're logged in and shows your name in the top bar.</li>
+      </ol>
+      <p>Logging in is the same, except in step 2 the server scrambles the password you typed and checks it matches the stored one.</p>
+      <p><strong>Too many attempts?</strong> To slow down password guessing, the server allows 5 quick tries, then one every 2 seconds, per internet address. Too fast and you get "too many requests". (Whether this works properly on Render still needs checking: see <a href="#l10-ratelimit">Layer 10</a>.)</p>
+      <p><strong>Coming back the next day:</strong> when the site loads, the app asks the server "who am I?" (<code>GET /api/auth/me</code>). Valid wristband: you're in. Expired: you're sent to the login page.</p>
+
+      <h3 id="l4-match">Finding a match</h3>
+      <p>Say Alice presses Play Now first, then Bob.</p>
+      <figure>
+        <div class="figbox">
+          <svg class="dg" viewBox="0 0 680 352" role="img" aria-label="Alice joins and is told to wait. Bob joins, the server pairs them, creates a game and picks colors. Alice learns about the match over her lobby line; Bob learns it in the reply to his own request. Both then open the game page.">
+            <defs>
+              <marker id="m4" viewBox="0 0 10 10" refX="9" refY="5" markerUnits="userSpaceOnUse" markerWidth="9" markerHeight="9" orient="auto-start-reverse"><path d="M0,0L10,5L0,10z" class="ah"/></marker>
+              <marker id="m4a" viewBox="0 0 10 10" refX="9" refY="5" markerUnits="userSpaceOnUse" markerWidth="10" markerHeight="10" orient="auto-start-reverse"><path d="M0,0L10,5L0,10z" class="aha"/></marker>
+            </defs>
+            <rect class="b" x="30" y="14" width="100" height="28" rx="5"/><text x="80" y="33" text-anchor="middle" class="t">Alice</text>
+            <rect class="bx" x="290" y="14" width="100" height="28" rx="5"/><text x="340" y="33" text-anchor="middle" class="t">Server</text>
+            <rect class="b" x="550" y="14" width="100" height="28" rx="5"/><text x="600" y="33" text-anchor="middle" class="t">Bob</text>
+            <line class="life" x1="80" y1="42" x2="80" y2="306"/><line class="life" x1="340" y1="42" x2="340" y2="306"/><line class="life" x1="600" y1="42" x2="600" y2="306"/>
+            <line class="ln" x1="82" y1="75" x2="337" y2="75" marker-end="url(#m4)"/><text x="210" y="69" text-anchor="middle" class="s m">POST /matchmaking/join</text>
+            <line class="ln ld" x1="338" y1="105" x2="83" y2="105" marker-end="url(#m4)"/><text x="210" y="99" text-anchor="middle" class="s">"waiting"</text>
+            <rect class="b" x="280" y="118" width="120" height="26" rx="5"/><text x="340" y="135" text-anchor="middle" class="s m">queue: [Alice]</text>
+            <line class="ln" x1="598" y1="175" x2="343" y2="175" marker-end="url(#m4)"/><text x="470" y="169" text-anchor="middle" class="s m">POST /matchmaking/join</text>
+            <rect class="bx" x="255" y="192" width="170" height="48" rx="5"/>
+            <text x="340" y="212" text-anchor="middle" class="s">pair them · new game</text>
+            <text x="340" y="229" text-anchor="middle" class="s">random colors · save</text>
+            <line class="la" x1="338" y1="270" x2="84" y2="270" marker-end="url(#m4a)"/><text x="210" y="264" text-anchor="middle" class="s m">match_found · black</text><text x="210" y="287" text-anchor="middle" class="s">over her lobby line</text>
+            <line class="la ld" x1="342" y1="270" x2="596" y2="270" marker-end="url(#m4a)"/><text x="470" y="264" text-anchor="middle" class="s m">matched · white</text><text x="470" y="287" text-anchor="middle" class="s">in his HTTP reply</text>
+            <rect class="b" x="20" y="310" width="120" height="30" rx="5"/><text x="80" y="330" text-anchor="middle" class="s m">/play/&lt;id&gt;</text>
+            <rect class="b" x="540" y="310" width="120" height="30" rx="5"/><text x="600" y="330" text-anchor="middle" class="s m">/play/&lt;id&gt;</text>
+          </svg>
+        </div>
+        <figcaption>Alice and Bob learn about the same match in two different ways, because only Bob is still waiting for a reply.</figcaption>
+      </figure>
+      <ol class="steps">
+        <li>Alice asks to join. Nobody is waiting, so she goes into the line and gets the reply "waiting". Her request is now finished.</li>
+        <li>Bob asks to join. Alice is waiting, so the server takes her out of the line and pairs them.</li>
+        <li>The server creates a new game, randomly decides who's white, and saves both players and colors to the database.</li>
+        <li>Alice's request was answered long ago, so the only way to reach her now is her <strong>lobby line</strong>. The server sends her <code>match_found</code> with her color.</li>
+        <li>Bob is still waiting for his reply, so he gets "matched" plus his color right in it. (He's also sent a <code>match_found</code> on his lobby line. Whichever arrives first moves him along.)</li>
+        <li>Both browsers save their color for this game and open <code>/play/&lt;gameId&gt;</code>.</li>
+      </ol>
+      <p><strong>What if Alice's lobby line happens to be down right then?</strong> The server puts the message aside (a "pending" message) and delivers it the moment she reconnects.</p>
+
+      <h3 id="l4-move">Making a move</h3>
+      <p>This is the heart of the app.</p>
+      <figure>
+        <div class="figbox">
+          <svg class="dg" viewBox="0 0 690 330" role="img" aria-label="You drag a piece and see it immediately. The move goes to the server over the game line. The server checks you're in the game, it's your turn and the move is legal, saves it to Neon, then forwards it to your opponent, whose board updates.">
+            <defs>
+              <marker id="m5" viewBox="0 0 10 10" refX="9" refY="5" markerUnits="userSpaceOnUse" markerWidth="9" markerHeight="9" orient="auto-start-reverse"><path d="M0,0L10,5L0,10z" class="ah"/></marker>
+              <marker id="m5a" viewBox="0 0 10 10" refX="9" refY="5" markerUnits="userSpaceOnUse" markerWidth="10" markerHeight="10" orient="auto-start-reverse"><path d="M0,0L10,5L0,10z" class="aha"/></marker>
+            </defs>
+            <rect class="b" x="20" y="14" width="100" height="28" rx="5"/><text x="70" y="33" text-anchor="middle" class="t">You</text>
+            <rect class="bx" x="250" y="14" width="100" height="28" rx="5"/><text x="300" y="33" text-anchor="middle" class="t">Server</text>
+            <rect class="b" x="420" y="14" width="100" height="28" rx="5"/><text x="470" y="33" text-anchor="middle" class="t">Neon</text>
+            <rect class="b" x="570" y="14" width="110" height="28" rx="5"/><text x="625" y="33" text-anchor="middle" class="t">Opponent</text>
+            <line class="life" x1="70" y1="42" x2="70" y2="322"/><line class="life" x1="300" y1="42" x2="300" y2="322"/><line class="life" x1="470" y1="42" x2="470" y2="322"/><line class="life" x1="625" y1="42" x2="625" y2="322"/>
+            <rect class="b" x="12" y="60" width="116" height="40" rx="5"/><text x="70" y="77" text-anchor="middle" class="s">drag e2 → e4,</text><text x="70" y="93" text-anchor="middle" class="s">board shows it now</text>
+            <line class="la" x1="72" y1="130" x2="296" y2="130" marker-end="url(#m5a)"/><text x="185" y="124" text-anchor="middle" class="s m">move e4</text><text x="185" y="146" text-anchor="middle" class="s">over the game line</text>
+            <rect class="bx" x="225" y="160" width="150" height="60" rx="5"/>
+            <text x="300" y="178" text-anchor="middle" class="s">in this game?</text>
+            <text x="300" y="194" text-anchor="middle" class="s">your turn?</text>
+            <text x="300" y="210" text-anchor="middle" class="s">legal move?</text>
+            <line class="ln" x1="302" y1="245" x2="467" y2="245" marker-end="url(#m5)"/><text x="385" y="239" text-anchor="middle" class="s">save the move</text>
+            <line class="la" x1="302" y1="280" x2="621" y2="280" marker-end="url(#m5a)"/><text x="548" y="274" text-anchor="middle" class="s m">move e4</text>
+            <rect class="b" x="570" y="292" width="110" height="28" rx="5"/><text x="625" y="311" text-anchor="middle" class="s">board updates</text>
+          </svg>
+        </div>
+        <figcaption>Your board updates straight away. The server checks the move and saves it before passing it to your opponent.</figcaption>
+      </figure>
+      <ol class="steps">
+        <li>You drag a piece. The board only lets you drop it on a legal square, because the browser app knows the rules too.</li>
+        <li>Your board shows the move immediately, without waiting for the server. This is called an "optimistic" update and it's what makes the game feel instant.</li>
+        <li>The browser sends the move over your game line: <code>{"type":"move", … "move":"e4", "from":"e2", "to":"e4"}</code>.</li>
+        <li>The server plays referee: are you one of the two players? Is it your turn? Is the move legal in the current position?</li>
+        <li>If it's all fine, the server saves the move to the database and updates its copy of the board.</li>
+        <li>The server forwards the move to your opponent's game line, and their board updates.</li>
+        <li>If that move ended the game (checkmate, for example), the server also sends "game over" to both of you.</li>
+      </ol>
+      <p>If any check in step 4 fails, the server quietly ignores the move. It doesn't tell you, which is one of the rough edges in <a href="#l10-silent">Layer 10</a>.</p>
+
+      <h3 id="l4-over">Game over</h3>
+      <ul>
+        <li><strong>By the board:</strong> after every move, the server's chess library looks at the position. Checkmate, stalemate and certain draws end the game automatically.</li>
+        <li><strong>By resigning:</strong> you press Resign and confirm. The browser sends <code>{"type":"resign"}</code>. The server records that you resigned, so your opponent wins.</li>
+        <li>Either way the server marks the game <em>finished</em> in the database and sends <code>game_over</code> with the winner (<code>white</code>, <code>black</code> or <code>draw</code>) to both players.</li>
+        <li>Each browser compares the winner with its own color and shows "You won", "You lost" or "Draw" on top of the board.</li>
+      </ul>
+
+      <h3 id="l4-reconnect">When your Wi-Fi drops</h3>
+      <figure>
+        <div class="figbox">
+          <svg class="dg" viewBox="0 0 680 165" role="img" aria-label="Timeline: the connection drops, the browser retries after waits of 0.5, 1, 2, 4 and 8 seconds, then reconnects, re-introduces itself, fetches the game and replays any missed moves.">
+            <text x="60" y="72" text-anchor="middle" class="s">connected</text>
+            <text x="140" y="56" text-anchor="middle" class="s">Wi-Fi drops</text>
+            <line x1="140" y1="62" x2="140" y2="98" class="ln"/>
+            <text x="310" y="72" text-anchor="middle" class="s">offline, retrying with growing waits</text>
+            <text x="481" y="56" text-anchor="middle" class="s acc t">back!</text>
+            <line class="la" x1="20" y1="90" x2="140" y2="90"/>
+            <line class="ln ld" x1="140" y1="90" x2="481" y2="90"/>
+            <line class="la" x1="481" y1="90" x2="660" y2="90"/>
+            <circle class="dot" cx="151" cy="90" r="4"/><circle class="dot" cx="173" cy="90" r="4"/><circle class="dot" cx="217" cy="90" r="4"/><circle class="dot" cx="305" cy="90" r="4"/><circle class="doton" cx="481" cy="90" r="6"/>
+            <text x="151" y="112" text-anchor="middle" class="s m">+0.5s</text>
+            <text x="173" y="128" text-anchor="middle" class="s m">+1s</text>
+            <text x="217" y="112" text-anchor="middle" class="s m">+2s</text>
+            <text x="305" y="128" text-anchor="middle" class="s m">+4s</text>
+            <text x="481" y="112" text-anchor="middle" class="s m">+8s</text>
+            <text x="512" y="112" class="s">1. say "auth" again</text>
+            <text x="512" y="128" class="s">2. fetch the game</text>
+            <text x="512" y="144" class="s">3. replay missed moves</text>
+            <text x="310" y="158" text-anchor="middle" class="cap">TIME OFFLINE, DRAWN TO SCALE</text>
+          </svg>
+        </div>
+        <figcaption>The browser keeps retrying, waiting twice as long each time (capped at 30 seconds). Once it's back, it catches up from the server.</figcaption>
+      </figure>
+      <ol class="steps">
+        <li>The browser notices the game line closed.</li>
+        <li>It tries to reconnect after 0.5 seconds, then 1, 2, 4, 8… up to 30 seconds between tries. Doubling the wait is called <a class="term" href="#g-backoff">exponential backoff</a>, and it stops thousands of browsers from hammering a struggling server at once.</li>
+        <li>When the line is back, the browser introduces itself again ("I'm here for game X").</li>
+        <li>It then asks for the whole game over HTTP and compares: "the server has 14 moves, I have 12". It plays the 2 missing moves on its board.</li>
+      </ol>
+      <p>Refreshing the page works the same way: your board starts empty and catches up from the server in one go.</p>
+
+      <h3 id="l4-restart">When the server goes to sleep or restarts</h3>
+      <p>On Render's free plan the server shuts down after about 15 minutes with no visitors, and the next visitor wakes it up. The same thing happens on every new deploy.</p>
+      <div class="tbl">
+        <table>
+          <thead><tr><th>Safe (in the database)</th><th>Forgotten (was in memory)</th></tr></thead>
+          <tbody>
+            <tr><td>Users and passwords</td><td>People waiting in the matchmaking line</td></tr>
+            <tr><td>Every game: players, colors, status</td><td>Open phone lines (browsers reconnect on their own)</td></tr>
+            <tr><td>Every move ever played</td><td>"Match found" messages not yet delivered</td></tr>
+            <tr><td></td><td>The server's quick-access copy of each live board</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p><strong>How an unfinished game comes back:</strong> the first time anyone touches that game after a restart, the server reads its moves from the database and replays them on a fresh board, in order. It's like setting up a board again from a written scoresheet. Then play simply continues.</p>
+
+      <h3 id="l4-replay">My Games and Replay</h3>
+      <ul>
+        <li><strong>My Games</strong> asks the server for your games (<code>GET /api/games</code>). The server looks up every game where you were one of the players, adds your opponent's name, and sorts newest first.</li>
+        <li><strong>Replay</strong> fetches one game with all its moves (<code>GET /api/games/&lt;id&gt;</code>). To show move 17, the browser starts from the opening position and plays moves 1 to 17. Buttons and arrow keys just change that number.</li>
+      </ul>
+      <p>Replay needs nothing special from the server. A replay is just the saved list of moves, played back.</p>
+
+      <div class="short">
+        <span class="tag">The short version</span>
+        <p>Login scrambles your password and hands you a wristband. Matchmaking reaches the first player over the lobby line and the second in the HTTP reply. A move shows on your board instantly, gets checked and saved by the server, then forwarded. Disconnects retry with growing waits and then catch up. Restarts lose only short-term things, and games are rebuilt from saved moves.</p>
+        <label class="read-check"><input type="checkbox" id="read-layer-4" value="layer-4" data-layer-check> I've read this layer</label>
+      </div>
+    </section>
+
+    <!-- ============================== LAYER 5 ============================== -->
+    <section class="layer" id="layer-5">
+      <div class="layer-head">
+        <div class="layer-meta"><span>Layer 5</span><span class="gauge" aria-label="depth 5 of 10"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i><i></i><i></i><i></i></span><span>medium · code names start here</span></div>
+        <h2 class="layer-title">Inside the server</h2>
+        <p class="layer-intro">The server is one Go program in <code>backend/</code>. It's split into folders called packages, and each one has a single job. Think of them as departments in a building.</p>
+      </div>
+
+      <figure id="l5-packages">
+        <div class="figbox">
+          <svg class="dg" viewBox="0 0 680 425" role="img" aria-label="Package map. main.go builds everything. Requests enter through handlers (HTTP), ws (live lines) or auth. handlers uses matchmaking and store; ws uses game and store; store keeps game boards and saves to Neon; db runs migrations; auth stores users in Neon. A move flows from ws to store to Neon.">
+            <defs>
+              <marker id="m6" viewBox="0 0 10 10" refX="9" refY="5" markerUnits="userSpaceOnUse" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0L10,5L0,10z" class="ah"/></marker>
+              <marker id="m6a" viewBox="0 0 10 10" refX="9" refY="5" markerUnits="userSpaceOnUse" markerWidth="10" markerHeight="10" orient="auto-start-reverse"><path d="M0,0L10,5L0,10z" class="aha"/></marker>
+            </defs>
+            <text x="20" y="48" class="cap">ENTRY</text>
+            <text x="20" y="134" class="cap">DOORS</text>
+            <text x="20" y="227" class="cap">LOGIC</text>
+            <text x="20" y="312" class="cap">RECORDS</text>
+            <text x="20" y="394" class="cap">DATABASE</text>
+            <rect class="b" x="120" y="20" width="540" height="48" rx="6"/>
+            <text x="390" y="40" text-anchor="middle" class="m t">cmd/server/main.go</text>
+            <text x="390" y="58" text-anchor="middle" class="s">reads settings, builds every part, starts the server</text>
+            <line class="ln" x1="205" y1="68" x2="205" y2="97" marker-end="url(#m6)"/>
+            <line class="ln" x1="390" y1="68" x2="390" y2="97" marker-end="url(#m6)"/>
+            <line class="ln" x1="575" y1="68" x2="575" y2="97" marker-end="url(#m6)"/>
+            <rect class="b" x="120" y="100" width="170" height="60" rx="6"/><text x="205" y="124" text-anchor="middle" class="m t">handlers</text><text x="205" y="143" text-anchor="middle" class="s">HTTP endpoints</text>
+            <rect class="bx" x="305" y="100" width="170" height="60" rx="6"/><text x="390" y="124" text-anchor="middle" class="m t">ws</text><text x="390" y="143" text-anchor="middle" class="s">live lines</text>
+            <rect class="b" x="490" y="100" width="170" height="60" rx="6"/><text x="575" y="124" text-anchor="middle" class="m t">auth</text><text x="575" y="143" text-anchor="middle" class="s">accounts &amp; wristbands</text>
+            <rect class="b" x="160" y="196" width="130" height="54" rx="6"/><text x="225" y="219" text-anchor="middle" class="m t">matchmaking</text><text x="225" y="238" text-anchor="middle" class="s">waiting line</text>
+            <rect class="b" x="345" y="196" width="130" height="54" rx="6"/><text x="410" y="219" text-anchor="middle" class="m t">game</text><text x="410" y="238" text-anchor="middle" class="s">boards &amp; rules</text>
+            <line class="ln" x1="225" y1="160" x2="225" y2="193" marker-end="url(#m6)"/>
+            <line class="ln" x1="410" y1="160" x2="410" y2="193" marker-end="url(#m6)"/>
+            <rect class="bx" x="120" y="280" width="355" height="56" rx="6"/><text x="297" y="303" text-anchor="middle" class="m t">store</text><text x="297" y="322" text-anchor="middle" class="s">one interface: MemoryStore or PostgresStore</text>
+            <rect class="b" x="490" y="280" width="90" height="56" rx="6"/><text x="535" y="303" text-anchor="middle" class="m t">db</text><text x="535" y="322" text-anchor="middle" class="s">migrations</text>
+            <line class="ln" x1="140" y1="160" x2="140" y2="277" marker-end="url(#m6)"/>
+            <line class="la" x1="325" y1="160" x2="325" y2="276" marker-end="url(#m6a)"/>
+            <text x="319" y="270" text-anchor="end" class="s acc">a move</text>
+            <line class="ln" x1="440" y1="280" x2="440" y2="253" marker-end="url(#m6)"/>
+            <rect class="b" x="120" y="370" width="540" height="40" rx="6"/>
+            <text x="390" y="395" text-anchor="middle" class="t">Neon Postgres · users · games · moves</text>
+            <line class="la" x1="297" y1="336" x2="297" y2="366" marker-end="url(#m6a)"/>
+            <text x="305" y="357" class="s acc">saves</text>
+            <line class="ln" x1="535" y1="336" x2="535" y2="367" marker-end="url(#m6)"/>
+            <line class="ln" x1="625" y1="160" x2="625" y2="367" marker-end="url(#m6)"/>
+            <text x="632" y="262" class="s">users</text>
+          </svg>
+        </div>
+        <figcaption>Arrows mean "uses". Everything is built once in <code>main.go</code>. Requests come in through a door and end up in the store. The green path is a move: <code>ws</code> gives it to <code>store</code>, which checks it with a <code>game</code> board and saves it to Neon.</figcaption>
+      </figure>
+
+      <h3>The departments</h3>
+      <div class="tbl">
+        <table>
+          <thead><tr><th>Package</th><th>Its job</th><th>Main files</th></tr></thead>
+          <tbody>
+            <tr><td><code>cmd/server</code></td><td>Reception. Reads settings (environment variables), decides between database mode and memory-only mode, creates every part once, sets up the URL routes, serves the website files, starts listening, and shuts down cleanly.</td><td><code>main.go</code></td></tr>
+            <tr><td><code>auth</code></td><td>Accounts and wristbands. Creates and checks JWTs, sets the cookie, handles register/login/logout/me, stores users (memory or Postgres), hashes passwords with bcrypt, and rate-limits login attempts.</td><td><code>jwt.go</code>, <code>middleware.go</code>, <code>handler.go</code>, <code>store.go</code>, <code>postgres_store.go</code>, <code>ratelimit.go</code></td></tr>
+            <tr><td><code>handlers</code></td><td>The HTTP endpoints for games and matchmaking: join the queue, get a game, list your games, get moves, make a move over HTTP.</td><td><code>api.go</code></td></tr>
+            <tr><td><code>ws</code></td><td>The phone lines. <code>hub.go</code> is the switchboard: who's connected, and messages waiting for someone who isn't. <code>handler.go</code> runs each line: check the wristband, open it, read the first message, then handle moves and resignations, with a ping every 45 seconds to keep it alive.</td><td><code>hub.go</code>, <code>handler.go</code></td></tr>
+            <tr><td><code>matchmaking</code></td><td>The waiting line. A list of player IDs. Joining either returns a pair or puts you in the line.</td><td><code>queue.go</code></td></tr>
+            <tr><td><code>game</code></td><td><code>Session</code> is one live chessboard that wraps the <a class="term" href="#g-notnil">notnil/chess</a> library: apply a move, whose turn, outcome, resign. <code>GameManager</code> is a quick in-memory lookup of who is in which game with which color.</td><td><code>session.go</code>, <code>manager.go</code></td></tr>
+            <tr><td><code>store</code></td><td>Records. A single <code>Store</code> <a class="term" href="#g-interface">interface</a> lists what the server needs (create a game, get it, list games, apply a move, whose turn, set players, outcome, resign). Two versions fulfil it: <code>MemoryStore</code> (everything forgotten on restart) and <code>PostgresStore</code> (live boards in memory, every change written to Neon).</td><td><code>memory.go</code>, <code>postgres.go</code></td></tr>
+            <tr><td><code>db</code></td><td>Connects to Postgres and runs <a class="term" href="#g-migration">migrations</a>: the three <code>.sql</code> files, each exactly once, tracked in a <code>schema_migrations</code> table.</td><td><code>db.go</code>, <code>migrations/*.sql</code></td></tr>
+            <tr><td><code>models</code></td><td>The shapes of data sent as JSON: <code>Game</code> and <code>MoveRecord</code>.</td><td><code>game.go</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3 id="l5-memory">What's in memory and what's in the database</h3>
+      <div class="tbl">
+        <table>
+          <thead><tr><th>Thing</th><th>Lives in</th><th>Survives a restart?</th></tr></thead>
+          <tbody>
+            <tr><td>Users</td><td>Neon · <code>users</code></td><td class="yes">Yes</td></tr>
+            <tr><td>Games (players, colors, status, board snapshot)</td><td>Neon · <code>games</code></td><td class="yes">Yes</td></tr>
+            <tr><td>Moves</td><td>Neon · <code>moves</code></td><td class="yes">Yes</td></tr>
+            <tr><td>Live chessboards (<code>game.Session</code>)</td><td>Memory, inside <code>PostgresStore</code></td><td>Rebuilt from moves when needed</td></tr>
+            <tr><td>Who's in which game (<code>GameManager</code>)</td><td>Memory</td><td class="no">No</td> </tr>
+            <tr><td>The waiting line (<code>Queue</code>)</td><td>Memory</td><td class="no">No</td></tr>
+            <tr><td>Open lines and pending messages (<code>Hub</code>)</td><td>Memory</td><td class="no">No</td></tr>
+            <tr><td>Rate-limit counters</td><td>Memory</td><td class="no">No</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>When <code>GameManager</code> has forgotten a game after a restart, the <code>ws</code> code falls back to asking the store, which reads the players and colors from Neon. That's why games keep working after the server wakes up.</p>
+
+      <div class="idea">
+        <span class="tag">Key idea · why there are locks everywhere</span>
+        <p>Go handles every connection in its own <a class="term" href="#g-goroutine">goroutine</a>, a lightweight thread. Two players can touch the same game at the same instant. A <a class="term" href="#g-mutex">mutex</a> (<code>sync.Mutex</code>) makes them take turns, so the board, queue and switchboard never get half-updated. You'll see <code>mu.Lock()</code> in almost every package.</p>
+      </div>
+      <div class="idea">
+        <span class="tag">Key idea · why the store is an interface</span>
+        <p>The handlers only know "there is something that can create games, apply moves…". They don't know or care whether it's memory or Postgres. <code>main.go</code> picks one at startup based on whether <code>DATABASE_URL</code> is set, and nothing else has to change.</p>
+      </div>
+
+      <div class="short">
+        <span class="tag">The short version</span>
+        <p><code>main.go</code> builds everything. Requests come in through <code>handlers</code> (HTTP), <code>ws</code> (live lines) and <code>auth</code>. <code>matchmaking</code> and <code>game</code> hold the logic, and <code>store</code> saves to Neon. Permanent things are in Neon. The queue, connections and lookups are in memory.</p>
+        <label class="read-check"><input type="checkbox" id="read-layer-5" value="layer-5" data-layer-check> I've read this layer</label>
+      </div>
+    </section>
+
+    <!-- ============================== LAYER 6 ============================== -->
+    <section class="layer" id="layer-6">
+      <div class="layer-head">
+        <div class="layer-meta"><span>Layer 6</span><span class="gauge" aria-label="depth 6 of 10"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i><i></i><i></i></span><span>medium</span></div>
+        <h2 class="layer-title">Inside the browser app</h2>
+        <p class="layer-intro">The frontend lives in <code>frontend/src</code>. It's built with <a class="term" href="#g-vite">Vite</a>, which turns it into plain HTML, JavaScript and CSS files in <code>frontend/dist</code>. Those are the files the Go server hands out.</p>
+      </div>
+
+      <figure>
+        <div class="figbox">
+          <svg class="dg" viewBox="0 0 680 330" role="img" aria-label="Component nesting: App with a router contains AuthProvider, which contains WSProvider, which contains the Navbar and the pages. Home, Login and Register are public. MatchMaking, Play, GamesList and Replay are wrapped in ProtectedRoute and need you to be logged in.">
+            <rect class="grp" x="20" y="20" width="640" height="300" rx="10"/>
+            <text x="34" y="38" class="s m">App · BrowserRouter</text>
+            <rect class="b" x="40" y="46" width="600" height="266" rx="8"/>
+            <text x="52" y="64" class="s">AuthProvider · who's logged in, login(), logout(), the api client</text>
+            <rect class="bx" x="60" y="74" width="560" height="230" rx="8"/>
+            <text x="72" y="92" class="s">WSProvider · the lobby line, listens for match_found</text>
+            <rect class="b" x="80" y="104" width="520" height="28" rx="5"/>
+            <text x="340" y="123" text-anchor="middle" class="m">Navbar</text>
+            <rect class="b" x="80" y="146" width="160" height="40" rx="5"/><text x="160" y="163" text-anchor="middle" class="m t">Home</text><text x="160" y="179" text-anchor="middle" class="s m">/</text>
+            <rect class="b" x="260" y="146" width="160" height="40" rx="5"/><text x="340" y="163" text-anchor="middle" class="m t">Login</text><text x="340" y="179" text-anchor="middle" class="s m">/login</text>
+            <rect class="b" x="440" y="146" width="160" height="40" rx="5"/><text x="520" y="163" text-anchor="middle" class="m t">Register</text><text x="520" y="179" text-anchor="middle" class="s m">/register</text>
+            <rect class="grp" x="70" y="198" width="540" height="96" rx="8"/>
+            <text x="82" y="214" class="s">ProtectedRoute · only when logged in</text>
+            <rect class="b" x="80" y="224" width="120" height="60" rx="5"/><text x="140" y="248" text-anchor="middle" class="m t">MatchMaking</text><text x="140" y="268" text-anchor="middle" class="s m">/matchmaking</text>
+            <rect class="bx" x="212" y="224" width="120" height="60" rx="5"/><text x="272" y="248" text-anchor="middle" class="m t">Play</text><text x="272" y="268" text-anchor="middle" class="s m">/play/:gameId</text>
+            <rect class="b" x="344" y="224" width="120" height="60" rx="5"/><text x="404" y="248" text-anchor="middle" class="m t">GamesList</text><text x="404" y="268" text-anchor="middle" class="s m">/games</text>
+            <rect class="b" x="476" y="224" width="120" height="60" rx="5"/><text x="536" y="248" text-anchor="middle" class="m t">Replay</text><text x="536" y="268" text-anchor="middle" class="s m">/replay/:gameId</text>
+          </svg>
+        </div>
+        <figcaption>Boxes inside boxes: every page sits inside the two always-on helpers, so any page can ask "who's logged in?", and a match can pull you into a game from anywhere.</figcaption>
+      </figure>
+
+      <h3 id="l6-pages">The pages</h3>
+      <div class="tbl">
+        <table>
+          <thead><tr><th>Address</th><th>Component</th><th>What it does</th><th>Talks to the server</th></tr></thead>
+          <tbody>
+            <tr><td><code>/</code></td><td><code>Home</code></td><td>Welcome screen with a Play Now button.</td><td>None</td></tr>
+            <tr><td><code>/login</code>, <code>/register</code></td><td><code>Login</code>, <code>Register</code></td><td>Forms that call <code>login()</code> or <code>register()</code> from the auth helper.</td><td><code>POST /auth/login</code>, <code>/auth/register</code></td></tr>
+            <tr><td><code>/matchmaking</code></td><td><code>MatchMaking</code></td><td>Joins the queue once. If matched right away, goes to the game. Otherwise shows "Waiting…" and lets the lobby line do the rest.</td><td><code>POST /matchmaking/join</code></td></tr>
+            <tr><td><code>/play/:gameId</code></td><td><code>Play</code></td><td>The live game (details below).</td><td>Game line + <code>GET /games/:id</code></td></tr>
+            <tr><td><code>/games</code></td><td><code>GamesList</code></td><td>Table of your games with a Replay link each.</td><td><code>GET /games</code></td></tr>
+            <tr><td><code>/replay/:gameId</code></td><td><code>Replay</code></td><td>Board in view-only mode plus step controls and arrow keys.</td><td><code>GET /games/:id</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>The always-on helpers</h3>
+      <p>React has a feature called <a class="term" href="#g-context">context</a> for sharing things with every page without passing them down by hand.</p>
+      <ul>
+        <li><strong><code>AuthContext</code></strong> holds the logged-in <code>user</code> and creates one shared <code>api</code> client (<a class="term" href="#g-axios">axios</a> pointed at <code>/api</code>, with cookies switched on). When the site loads, it calls <code>/auth/me</code> to restore your session. It also provides <code>login()</code>, <code>register()</code> and <code>logout()</code>.</li>
+        <li><strong><code>WSContext</code></strong> opens the lobby line as soon as you're logged in. When <code>match_found</code> arrives, it saves your color and navigates to the game.</li>
+        <li><strong><code>ProtectedRoute</code></strong> wraps the private pages. While the session check is running it shows nothing. If you're not logged in, it sends you to <code>/login</code>.</li>
+      </ul>
+
+      <h3 id="l6-game">The game page, piece by piece</h3>
+      <ul>
+        <li><strong><code>useChessGame</code></strong> (a <a class="term" href="#g-hook">hook</a>) keeps a <a class="term" href="#g-chessjs">chess.js</a> game and gives the page the position (<a class="term" href="#g-fen">FEN</a>), the move list, a status sentence ("White to move", "Checkmate — Black wins"), and functions like <code>move()</code>.</li>
+        <li><strong><code>ChessBoard</code></strong> wraps <a class="term" href="#g-chessground">chessground</a>, the draggable board from lichess. It's given the position, the legal destination squares for every piece (<code>buildDests</code>), and which color you're allowed to move.</li>
+        <li><strong><code>Play</code></strong> ties it together:
+          <ul>
+            <li>Opens the game line with <code>ReconnectingWebSocket</code>. Every time it connects, it sends <code>auth</code> with the game ID, then calls <code>resync()</code> to catch up.</li>
+            <li>On an incoming <code>move</code>, it applies it. On <code>game_over</code>, it shows the result overlay.</li>
+            <li>When you move: if it's a pawn reaching the last row, it shows the promotion picker first. Then <code>sendMove()</code> applies the move locally and sends it.</li>
+            <li>Resign asks you to confirm, then sends <code>resign</code>.</li>
+            <li>Your color comes from <code>localStorage</code> (<code>color_&lt;gameId&gt;</code>), saved during matchmaking. It decides which way the board faces.</li>
+          </ul>
+        </li>
+        <li><strong><code>GameInfo</code></strong> and <strong><code>GameControls</code></strong> show the status, move list and position, plus the buttons.</li>
+        <li><strong><code>lib/reconnectingWebSocket.ts</code></strong> is the retry-with-backoff wrapper from Layer 4. <strong><code>lib/wsUrl.ts</code></strong> builds <code>wss://your-site/api/ws</code> on HTTPS and <code>ws://…</code> on plain HTTP, so it works locally and live with no settings.</li>
+      </ul>
+
+      <div class="idea">
+        <span class="tag">Key idea · useRef versus useState</span>
+        <p>The chess.js game object is changed in place, so it lives in a <code>useRef</code> (a box React doesn't watch). After every move, the hook copies the new FEN, move list and status into <code>useState</code>, and changing state is what makes React redraw the page.</p>
+      </div>
+
+      <div class="short">
+        <span class="tag">The short version</span>
+        <p>Six pages inside two always-on helpers: Auth (who you are) and WS (the lobby line). The game page combines a chess.js hook, a chessground board and a reconnecting game line that catches up on every connect.</p>
+        <label class="read-check"><input type="checkbox" id="read-layer-6" value="layer-6" data-layer-check> I've read this layer</label>
+      </div>
+    </section>
+
+    <!-- ============================== LAYER 7 ============================== -->
+    <section class="layer" id="layer-7">
+      <div class="layer-head">
+        <div class="layer-meta"><span>Layer 7</span><span class="gauge" aria-label="depth 7 of 10"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i><i></i></span><span>medium–deep</span></div>
+        <h2 class="layer-title">The data</h2>
+        <p class="layer-intro">What's stored, what's sent, and what every message looks like. Keep this layer open as a reference while reading code.</p>
+      </div>
+
+      <h3 id="l7-tables">The three tables</h3>
+      <figure>
+        <div class="figbox">
+          <svg class="dg" viewBox="0 0 680 265" role="img" aria-label="Database tables. games has player_a_id and player_b_id pointing to users.id. moves has game_id pointing to games.id and played_by pointing to users.id.">
+            <defs>
+              <marker id="m7" viewBox="0 0 10 10" refX="9" refY="5" markerUnits="userSpaceOnUse" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0L10,5L0,10z" class="ah"/></marker>
+            </defs>
+            <!-- users -->
+            <rect class="b" x="20" y="20" width="180" height="108" rx="6"/>
+            <rect class="hd" x="21" y="21" width="178" height="27" rx="5"/>
+            <text x="30" y="39" class="m t">users</text>
+            <text x="30" y="62" class="m s" style="fill:currentColor">id</text><text x="190" y="62" text-anchor="end" class="s">PK</text>
+            <text x="30" y="82" class="m s" style="fill:currentColor">username</text><text x="190" y="82" text-anchor="end" class="s">unique</text>
+            <text x="30" y="102" class="m s" style="fill:currentColor">password_hash</text>
+            <text x="30" y="122" class="m s" style="fill:currentColor">created_at</text>
+            <!-- games -->
+            <rect class="b" x="245" y="20" width="205" height="208" rx="6"/>
+            <rect class="hd" x="246" y="21" width="203" height="27" rx="5"/>
+            <text x="255" y="39" class="m t">games</text>
+            <text x="255" y="62" class="m s" style="fill:currentColor">id</text><text x="440" y="62" text-anchor="end" class="s">PK</text>
+            <text x="255" y="82" class="m s" style="fill:currentColor">player_a_id</text><text x="440" y="82" text-anchor="end" class="s">→ users</text>
+            <text x="255" y="102" class="m s" style="fill:currentColor">player_b_id</text><text x="440" y="102" text-anchor="end" class="s">→ users</text>
+            <text x="255" y="122" class="m s" style="fill:currentColor">player_a_color</text>
+            <text x="255" y="142" class="m s" style="fill:currentColor">player_b_color</text>
+            <text x="255" y="162" class="m s" style="fill:currentColor">status</text>
+            <text x="255" y="182" class="m s" style="fill:currentColor">current_fen</text>
+            <text x="255" y="202" class="m s" style="fill:currentColor">created_at</text>
+            <text x="255" y="222" class="m s" style="fill:currentColor">finished_at</text>
+            <!-- moves -->
+            <rect class="b" x="490" y="20" width="180" height="208" rx="6"/>
+            <rect class="hd" x="491" y="21" width="178" height="27" rx="5"/>
+            <text x="500" y="39" class="m t">moves</text>
+            <text x="500" y="62" class="m s" style="fill:currentColor">id</text><text x="660" y="62" text-anchor="end" class="s">PK</text>
+            <text x="500" y="82" class="m s" style="fill:currentColor">game_id</text><text x="660" y="82" text-anchor="end" class="s">→ games</text>
+            <text x="500" y="102" class="m s" style="fill:currentColor">ply</text>
+            <text x="500" y="122" class="m s" style="fill:currentColor">san</text>
+            <text x="500" y="142" class="m s" style="fill:currentColor">uci</text>
+            <text x="500" y="162" class="m s" style="fill:currentColor">from_sq</text>
+            <text x="500" y="182" class="m s" style="fill:currentColor">to_sq</text>
+            <text x="500" y="202" class="m s" style="fill:currentColor">played_by</text><text x="660" y="202" text-anchor="end" class="s">→ users</text>
+            <text x="500" y="222" class="m s" style="fill:currentColor">played_at</text>
+            <!-- links -->
+            <path class="ln" d="M245,78 H225 V58 H203" marker-end="url(#m7)"/>
+            <path class="ln" d="M245,98 H225 V78"/>
+            <path class="ln" d="M490,78 H470 V58 H453" marker-end="url(#m7)"/>
+            <path class="ln ld" d="M490,198 H472 V250 H110 V131" marker-end="url(#m7)"/>
+            <text x="290" y="244" text-anchor="middle" class="s m">played_by → users.id</text>
+          </svg>
+        </div>
+        <figcaption>Each game points at its two players, and each move points at its game and the player who made it. The server also keeps a small <code>schema_migrations</code> table to remember which <code>.sql</code> files have run.</figcaption>
+      </figure>
+      <ul>
+        <li><strong>Player A</strong> is whoever joined the queue first, <strong>player B</strong> second. Colors are picked randomly, so A isn't always white.</li>
+        <li><strong><code>current_fen</code></strong> is a snapshot of the board after the latest move, updated on every move.</li>
+        <li><strong><code>ply</code></strong> numbers each half-move from 0. Ply 0 is white's first move, ply 1 black's reply, and so on.</li>
+        <li>The tables are created by <code>backend/internal/db/migrations/001_create_users.sql</code>, <code>002_create_games.sql</code> and <code>003_create_moves.sql</code>.</li>
+      </ul>
+
+      <h4>A game's status</h4>
+      <figure>
+        <div class="figbox">
+          <svg class="dg sm" viewBox="0 0 600 125" role="img" aria-label="A game starts as waiting, becomes playing after the first move, and becomes finished when it ends. Resigning before any move goes straight from waiting to finished.">
+            <defs><marker id="m8" viewBox="0 0 10 10" refX="9" refY="5" markerUnits="userSpaceOnUse" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0L10,5L0,10z" class="ah"/></marker></defs>
+            <rect class="b" x="20" y="20" width="120" height="40" rx="6"/><text x="80" y="45" text-anchor="middle" class="m">waiting</text>
+            <rect class="b" x="240" y="20" width="120" height="40" rx="6"/><text x="300" y="45" text-anchor="middle" class="m">playing</text>
+            <rect class="bx" x="460" y="20" width="120" height="40" rx="6"/><text x="520" y="45" text-anchor="middle" class="m">finished</text>
+            <line class="ln" x1="140" y1="40" x2="237" y2="40" marker-end="url(#m8)"/><text x="190" y="32" text-anchor="middle" class="s">first move</text>
+            <line class="ln" x1="360" y1="40" x2="457" y2="40" marker-end="url(#m8)"/><text x="410" y="32" text-anchor="middle" class="s">game ends</text>
+            <path class="ln ld" d="M80,60 C80,104 520,104 520,63" marker-end="url(#m8)"/>
+            <text x="300" y="118" text-anchor="middle" class="s">resign before any move</text>
+          </svg>
+        </div>
+        <figcaption>A freshly matched game says <code>waiting</code> until someone moves, so it shows up that way in My Games.</figcaption>
+      </figure>
+
+      <h3 id="l7-notation">Chess notation the app uses</h3>
+      <div class="tbl">
+        <table>
+          <thead><tr><th>Name</th><th>What it is</th><th>Example</th></tr></thead>
+          <tbody>
+            <tr><td><a class="term" href="#g-fen">FEN</a></td><td>The whole board in one line: pieces, whose turn, castling rights, move counters.</td><td><code>rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1</code></td></tr>
+            <tr><td><a class="term" href="#g-san">SAN</a></td><td>How people write moves. This is what browsers send to the server.</td><td><code>e4</code>, <code>Nf3</code>, <code>exd5</code>, <code>O-O</code>, <code>e8=Q</code></td></tr>
+            <tr><td><a class="term" href="#g-uci">UCI</a></td><td>From-square plus to-square, with a promotion letter if needed. Stored alongside SAN.</td><td><code>e2e4</code>, <code>e7e8q</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3 id="l7-http">HTTP endpoints</h3>
+      <p>All of these live under <code>/api</code> on your domain. "Login" means the request must carry a valid wristband cookie.</p>
+      <div class="tbl">
+        <table>
+          <thead><tr><th>Method</th><th>Path</th><th>Login?</th><th>Purpose</th></tr></thead>
+          <tbody>
+            <tr><td>POST</td><td><code>/auth/register</code></td><td>—</td><td>Create an account, set the cookie. Rate-limited.</td></tr>
+            <tr><td>POST</td><td><code>/auth/login</code></td><td>—</td><td>Check password, set the cookie. Rate-limited.</td></tr>
+            <tr><td>POST</td><td><code>/auth/logout</code></td><td>—</td><td>Clear the cookie.</td></tr>
+            <tr><td>GET</td><td><code>/auth/me</code></td><td>cookie</td><td>"Who am I?" Returns your ID and username.</td></tr>
+            <tr><td>POST</td><td><code>/matchmaking/join</code></td><td>yes</td><td>Join the queue. Returns "waiting", or "matched" with a game ID and your color.</td></tr>
+            <tr><td>GET</td><td><code>/games</code></td><td>yes</td><td>Your games, newest first, with opponent names.</td></tr>
+            <tr><td>GET</td><td><code>/games/:id</code></td><td>—</td><td>One game: players, colors, status, position, every move.</td></tr>
+            <tr><td>GET</td><td><code>/games/:id/moves</code></td><td>yes</td><td>Just the move list.</td></tr>
+            <tr><td>POST</td><td><code>/games/:id/move</code></td><td>yes</td><td>Make a move over HTTP. The app doesn't use it (it uses the game line).</td></tr>
+            <tr><td>POST</td><td><code>/games</code></td><td>—</td><td>Creates an empty game. A leftover: nothing in the app calls it.</td></tr>
+            <tr><td>GET</td><td><code>/healthz</code> <span style="color:var(--muted)">(not under /api)</span></td><td>—</td><td>Returns <code>ok</code> if the server is up and can reach the database.</td></tr>
+            <tr><td>WS</td><td><code>/ws</code></td><td>cookie</td><td>Opens a lobby line or a game line.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p class="file">POST /api/matchmaking/join · the two possible replies</p>
+<pre><code>{"Status": "waiting"}
+
+{"Status": "matched", "gameId": "9b1c…", "playerColor": "white"}</code></pre>
+
+      <p class="file">GET /api/games/:id · shortened</p>
+<pre><code>{
+  "id": "9b1c…",
+  "playerA": "4f2a…", "playerB": "c07e…",
+  "playerAUsername": "alice", "playerBUsername": "bob",
+  "playerAColor": "black", "playerBColor": "white",
+  "status": "playing",
+  "initial_fen": "rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq e6 0 2",
+  "moves": [
+    {"ply": 0, "san": "e4", "uci": "e2e4", "from": "e2", "to": "e4", "by": "c07e…", "timestamp": "…"},
+    {"ply": 1, "san": "e5", "uci": "e7e5", "from": "e7", "to": "e5", "by": "4f2a…", "timestamp": "…"}
+  ],
+  "createdAt": "…"
+}</code></pre>
+      <p>Watch out: the field called <code>initial_fen</code> actually holds the <em>current</em> position. It's a naming slip in <code>models/game.go</code>.</p>
+
+      <h3 id="l7-ws">WebSocket messages</h3>
+      <p>Every message has the same envelope: a <code>type</code>, usually a <code>gameId</code>, and a <code>payload</code>.</p>
+      <div class="tbl">
+        <table>
+          <thead><tr><th>Direction</th><th>Type</th><th>Example</th></tr></thead>
+          <tbody>
+            <tr><td>browser → server</td><td><code>auth</code> (lobby)</td><td><code>{"type":"auth","payload":{}}</code></td></tr>
+            <tr><td>browser → server</td><td><code>auth</code> (game)</td><td><code>{"type":"auth","payload":{"gameId":"9b1c…"}}</code></td></tr>
+            <tr><td>browser → server</td><td><code>move</code></td><td><code>{"type":"move","gameId":"9b1c…","payload":{"move":"e8=N","from":"e7","to":"e8","promotion":"n"}}</code></td></tr>
+            <tr><td>browser → server</td><td><code>resign</code></td><td><code>{"type":"resign","gameId":"9b1c…"}</code></td></tr>
+            <tr><td>server → browser</td><td><code>match_found</code></td><td><code>{"type":"match_found","gameId":"9b1c…","payload":{"playerColor":"black"}}</code></td></tr>
+            <tr><td>server → browser</td><td><code>move</code></td><td>The same message the mover sent, forwarded as is.</td></tr>
+            <tr><td>server → browser</td><td><code>game_over</code></td><td><code>{"type":"game_over","gameId":"9b1c…","payload":{"outcome":"white"}}</code> (or <code>black</code>, <code>draw</code>)</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>The server checks the SAN in <code>move</code> (here <code>e8=N</code>). The opponent's browser applies <code>from</code>, <code>to</code> and <code>promotion</code>. There are also invisible "ping" and "pong" frames every 45 seconds to keep the line alive. Your code never sees those.</p>
+
+      <div class="short">
+        <span class="tag">The short version</span>
+        <p>Three tables: users, games (pointing at two users) and moves (pointing at a game). Moves travel as SAN. Boards are stored as FEN. About ten HTTP endpoints, plus four message types going up the line and three coming down.</p>
+        <label class="read-check"><input type="checkbox" id="read-layer-7" value="layer-7" data-layer-check> I've read this layer</label>
+      </div>
+    </section>
+
+    <!-- ============================== LAYER 8 ============================== -->
+    <section class="layer" id="layer-8">
+      <div class="layer-head">
+        <div class="layer-meta"><span>Layer 8</span><span class="gauge" aria-label="depth 8 of 10"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i></span><span>medium–deep</span></div>
+        <h2 class="layer-title">How it's deployed</h2>
+        <p class="layer-intro">How your code gets from GitHub to <code>chess.bhargavnkrishna.site</code>, what settings it needs, and why some files in the repo aren't used.</p>
+      </div>
+
+      <figure>
+        <div class="figbox">
+          <svg class="dg" viewBox="0 0 680 215" role="img" aria-label="Pushing to main on GitHub triggers Render, which builds the Docker image in three stages and starts the container. Players reach the container at your domain; the container connects to Neon using DATABASE_URL.">
+            <defs><marker id="m9" viewBox="0 0 10 10" refX="9" refY="5" markerUnits="userSpaceOnUse" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0L10,5L0,10z" class="ah"/></marker></defs>
+            <text x="200" y="26" text-anchor="middle" class="s">every push to main redeploys</text>
+            <rect class="b" x="5" y="40" width="110" height="60" rx="6"/><text x="60" y="66" text-anchor="middle" class="t">GitHub</text><text x="60" y="85" text-anchor="middle" class="s">push to main</text>
+            <rect class="b" x="145" y="40" width="110" height="60" rx="6"/><text x="200" y="66" text-anchor="middle" class="t">Render</text><text x="200" y="85" text-anchor="middle" class="s">sees the commit</text>
+            <rect class="b" x="285" y="40" width="110" height="60" rx="6"/><text x="340" y="66" text-anchor="middle" class="t">docker build</text><text x="340" y="85" text-anchor="middle" class="s">Node → Go → Alpine</text>
+            <rect class="bx" x="425" y="40" width="110" height="60" rx="6"/><text x="480" y="66" text-anchor="middle" class="t">Container</text><text x="480" y="85" text-anchor="middle" class="s m">chess-server</text>
+            <rect class="b" x="565" y="40" width="110" height="60" rx="6"/><text x="620" y="66" text-anchor="middle" class="t">Players</text><text x="620" y="85" text-anchor="middle" class="s">your domain</text>
+            <line class="ln" x1="115" y1="70" x2="142" y2="70" marker-end="url(#m9)"/>
+            <line class="ln" x1="255" y1="70" x2="282" y2="70" marker-end="url(#m9)"/>
+            <line class="ln" x1="395" y1="70" x2="422" y2="70" marker-end="url(#m9)"/>
+            <line class="ln" x1="538" y1="70" x2="562" y2="70" marker-start="url(#m9)" marker-end="url(#m9)"/>
+            <text x="200" y="122" text-anchor="middle" class="s">settings live in the</text>
+            <text x="200" y="138" text-anchor="middle" class="s">Render dashboard</text>
+            <rect class="b" x="425" y="150" width="110" height="50" rx="6"/><text x="480" y="172" text-anchor="middle" class="t">Neon</text><text x="480" y="190" text-anchor="middle" class="s">Postgres</text>
+            <line class="ln" x1="480" y1="103" x2="480" y2="147" marker-start="url(#m9)" marker-end="url(#m9)"/>
+            <text x="490" y="129" class="s m">DATABASE_URL</text>
+          </svg>
+        </div>
+        <figcaption>Auto-deploy is on for <code>main</code>, so merging to <code>main</code> updates the live site. Pushing to any other branch doesn't.</figcaption>
+      </figure>
+
+      <h3>The Dockerfile's three stages</h3>
+      <p>A <a class="term" href="#g-docker">Dockerfile</a> is a recipe for building a <a class="term" href="#g-container">container</a> image. Yours has three stages, and only the result of the last one is kept:</p>
+      <ol class="steps">
+        <li><strong><code>node:20-alpine</code></strong> installs the frontend's packages and runs <code>npm run build</code>. Out come plain files in <code>frontend/dist</code>.</li>
+        <li><strong><code>golang:1.25-alpine</code></strong> compiles the backend into a single program, <code>chess-server</code>. <code>CGO_ENABLED=0</code> makes it fully self-contained.</li>
+        <li><strong><code>alpine:latest</code></strong> is a tiny final image. It copies in just the program and the <code>dist</code> folder, then runs <code>/app/chess-server</code>.</li>
+      </ol>
+      <p>When it starts, the Go server sends <code>/api/…</code> to the API, <code>/healthz</code> to the health check, and everything else to the website files. Unknown paths like <code>/play/abc</code> get <code>index.html</code>, so React can show the right page after a refresh.</p>
+
+      <h3 id="l8-env">Settings (environment variables)</h3>
+      <p>These are set in Render's dashboard under <strong>Environment</strong>, never committed to the repo.</p>
+      <div class="tbl">
+        <table>
+          <thead><tr><th>Variable</th><th>What it does</th><th>If it's wrong</th></tr></thead>
+          <tbody>
+            <tr><td><code>DATABASE_URL</code></td><td>Connection string for Neon.</td><td>Missing: the server runs in memory-only mode and forgets everything on every sleep.</td></tr>
+            <tr><td><code>JWT_SECRET</code></td><td>The secret used to sign wristbands. At least 32 characters.</td><td>Missing or short: the server refuses to start. Leaked: anyone could forge a wristband.</td></tr>
+            <tr><td><code>COOKIE_SECURE</code></td><td><code>true</code> makes the browser send the cookie only over HTTPS.</td><td>Should be <code>true</code> live. Locally it's <code>false</code> because there's no HTTPS.</td></tr>
+            <tr><td><code>ALLOWED_ORIGIN</code></td><td>The site's own address, <code>https://chess.bhargavnkrishna.site</code>. Used for CORS and to check where WebSocket connections come from.</td><td>Mismatch: phone lines are refused, so matching and live moves stop working.</td></tr>
+            <tr><td><code>PORT</code></td><td>Which port to listen on. Render sets it for you.</td><td>Defaults to 8080.</td></tr>
+            <tr><td><code>STATIC_DIR</code></td><td>Where the website files are.</td><td>Defaults to <code>frontend/dist</code>, which matches the Dockerfile.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3 id="l8-free">What the free plans mean</h3>
+      <ul>
+        <li><strong>Render free:</strong> after about 15 minutes with no visitors, the server is stopped. The next visitor waits while it starts again, "50 seconds or more" according to your dashboard banner. Layer 4 covers what's lost.</li>
+        <li><strong>Neon free:</strong> the database also pauses when idle and wakes on the first query, which adds a little delay to that first request.</li>
+        <li><code>/healthz</code> pings the database too, so it tells you whether both are awake and connected.</li>
+      </ul>
+
+      <h3>Local development versus live</h3>
+      <div class="tbl">
+        <table>
+          <thead><tr><th></th><th>On your laptop (<code>./dev.sh</code>)</th><th>Live on Render</th></tr></thead>
+          <tbody>
+            <tr><td>Database</td><td>Postgres in Docker (<code>docker-compose.yml</code>)</td><td>Neon</td></tr>
+            <tr><td>Backend</td><td><code>go run</code> on port 8080</td><td>Compiled <code>chess-server</code> in the container</td></tr>
+            <tr><td>Frontend</td><td>Vite dev server on port 5173, reloads as you edit</td><td>Built files served by the Go server</td></tr>
+            <tr><td>How <code>/api</code> reaches Go</td><td>Vite forwards <code>/api</code> (and WebSockets) to port 8080 (<code>vite.config.ts</code>)</td><td>Same program, no forwarding needed</td></tr>
+            <tr><td>Cookie</td><td>Not Secure (plain HTTP)</td><td>Secure (HTTPS)</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3 id="l8-leftovers">Files the live site doesn't use</h3>
+      <p><strong>How they got there.</strong> On 30 August you first set the app up to run on your own machine: <code>prod.sh</code> started everything, <a class="term" href="#g-caddy">Caddy</a> routed traffic, and a Cloudflare tunnel exposed it to the internet. That commit (<code>8f5283e</code>, "deployment") is also the one Render tried to deploy first, and it failed because there was no Dockerfile yet. About an hour and a half later, <code>a63f7d6</code> added the Dockerfile and taught the Go server to hand out the website files itself. That's what's live, and it made the self-hosting files unnecessary.</p>
+      <p>Cleanup is on hold, so here's what each leftover is. None of them affect the live site.</p>
+      <div class="tbl">
+        <table>
+          <thead><tr><th>File or code</th><th>What it was for</th><th>Used now?</th></tr></thead>
+          <tbody>
+            <tr><td><code>Caddyfile</code></td><td>Caddy's routing rules: <code>/api/*</code> and <code>/healthz</code> to the Go server, everything else to the website files, listening only on the local machine.</td><td class="no">No. Go does this itself now.</td></tr>
+            <tr><td><code>prod.sh</code></td><td>Self-hosting launcher: start Postgres, build both halves, run Go and Caddy.</td><td class="no">No</td></tr>
+            <tr><td><code>deploy/cloudflared.yml.example</code></td><td>Config for a Cloudflare tunnel to expose your machine at your domain.</td><td class="no">No</td></tr>
+            <tr><td><code>frontend/bun.lockb</code></td><td>Lockfile from an early experiment with the Bun package manager.</td><td class="no">No. <code>package-lock.json</code> (npm) is the real one.</td></tr>
+            <tr><td><code>frontend/README.md</code></td><td>Vite's template readme, not about your app.</td><td class="no">No</td></tr>
+            <tr><td><code>frontend/src/assets/*</code>, <code>public/icons.svg</code></td><td>Template images (<code>hero.png</code>, <code>react.svg</code>, <code>vite.svg</code>).</td><td class="no">No. Nothing imports them.</td></tr>
+            <tr><td><code>frontend/.example.env</code></td><td>Empty file.</td><td class="no">No</td></tr>
+            <tr><td><code>frontend/src/lib/pgnDisplay.ts</code></td><td>Helpers to format a full PGN with headers.</td><td class="no">No. Nothing imports it.</td></tr>
+            <tr><td><code>react-chessboard</code> in <code>package.json</code></td><td>An alternative board library.</td><td class="no">No. The app uses chessground.</td></tr>
+            <tr><td><code>POST /games</code> (<code>api.CreateGame</code>)</td><td>Create an empty game. Needs no login.</td><td class="no">No</td></tr>
+            <tr><td><code>GameManager.playerToGame</code>, <code>Queue.ClearQueue</code></td><td>A lookup and a helper that are written but never read or called.</td><td class="no">No</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>Two small related things: the browser tab title is still Vite's default, "frontend" (<code>frontend/index.html</code>). And a few code comments still talk about the Cloudflare tunnel, which matters for one of the rough edges in <a href="#l10-ratelimit">Layer 10</a>.</p>
+
+      <div class="short">
+        <span class="tag">The short version</span>
+        <p>Push to <code>main</code>, Render builds the three-stage Dockerfile and runs one container that serves both the API and the website, talking to Neon through <code>DATABASE_URL</code>. Free plans mean cold starts. Caddy, <code>prod.sh</code> and the tunnel config are leftovers from a first attempt at self-hosting.</p>
+        <label class="read-check"><input type="checkbox" id="read-layer-8" value="layer-8" data-layer-check> I've read this layer</label>
+      </div>
+    </section>
+
+    <!-- ============================== LAYER 9 ============================== -->
+    <section class="layer" id="layer-9">
+      <div class="layer-head">
+        <div class="layer-meta"><span>Layer 9</span><span class="gauge" aria-label="depth 9 of 10"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i></i></span><span>deep</span></div>
+        <h2 class="layer-title">Reading the actual code</h2>
+        <p class="layer-intro">Guided tours of the nine most important pieces of code, with real excerpts. <span class="cm">// …</span> marks lines left out to keep things short. Read these with the file open next to you.</p>
+      </div>
+
+      <h3 id="l9-startup">1 · Starting up: picking database or memory</h3>
+      <p class="file">backend/cmd/server/main.go</p>
+<pre><code>if dbURL := os.Getenv("DATABASE_URL"); dbURL != "" {
+    pool, err := db.Connect(dbURL)
+    <span class="cm">// … stop if it fails …</span>
+    if err := db.Migrate(pool); err != nil { <span class="cm">/* … */</span> }
+    st = store.NewPostgresStore(pool)
+    userStore = auth.NewPostgresUserStore(pool)
+} else {
+    logger.Println("DATABASE_URL not set — using in-memory stores")
+    st = store.NewMemoryStore()
+    userStore = auth.NewUserStore()
+}
+<span class="cm">// …</span>
+root.Handle("/api/", http.StripPrefix("/api", mux))
+root.Handle("/", spaHandler(getenv("STATIC_DIR", "frontend/dist")))</code></pre>
+      <ul>
+        <li><code>st</code> has the type <code>store.Store</code> (the interface), so either version fits.</li>
+        <li>Migrations run on every startup but skip files already applied.</li>
+        <li><code>StripPrefix</code> removes <code>/api</code>, so the inner routes are written as <code>/games</code>, <code>/auth/login</code> and so on.</li>
+      </ul>
+
+      <h3 id="l9-middleware">2 · Checking the wristband</h3>
+      <p class="file">backend/internal/auth/middleware.go</p>
+<pre><code>func Middleware(next http.Handler) http.Handler {
+    return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+        claims, err := TokenFromRequest(r)       <span class="cm">// read cookie, verify signature + expiry</span>
+        if err != nil {
+            http.Error(w, "unauthorized", http.StatusUnauthorized)
+            return
+        }
+        ctx := context.WithValue(r.Context(), UserIDKey, claims.UserID)
+        ctx = context.WithValue(ctx, UsernameKey, claims.Username)
+        next.ServeHTTP(w, r.WithContext(ctx))    <span class="cm">// hand over, with your ID attached</span>
+    })
+}</code></pre>
+      <ul>
+        <li>This is the middleware pattern: a handler that wraps another handler. In <code>main.go</code> you'll see <code>auth.Middleware(http.HandlerFunc(api.ListGames))</code>.</li>
+        <li>Later code calls <code>auth.UserIDFromContext(r.Context())</code> to get your ID. It never comes from the request body.</li>
+      </ul>
+
+      <h3 id="l9-match">3 · Matchmaking</h3>
+      <p class="file">backend/internal/matchmaking/queue.go</p>
+<pre><code>func (q *Queue) JoinQueue(playerID string) *MatchResult {
+    q.mu.Lock()
+    defer q.mu.Unlock()
+    if slices.Contains(q.waiting, playerID) {
+        return nil                               <span class="cm">// already waiting</span>
+    }
+    if len(q.waiting) &gt; 0 {
+        playerA := q.waiting[0]                  <span class="cm">// first in line</span>
+        q.waiting = q.waiting[1:]
+        return &amp;MatchResult{PlayerA: playerA, PlayerB: playerID}
+    }
+    q.waiting = append(q.waiting, playerID)
+    return nil
+}</code></pre>
+      <p class="file">backend/internal/handlers/api.go · JoinMatchMaking, shortened</p>
+<pre><code>res := a.Queue.JoinQueue(playerID)
+if res == nil {
+    writeJSON(w, http.StatusOK, struct{ Status string }{Status: "waiting"})
+    return
+}
+g, err := a.Store.CreateGame()
+<span class="cm">// …</span>
+a.Manager.AddGame(g.ID, res.PlayerA, res.PlayerB)   <span class="cm">// random colors picked here</span>
+gm := a.Manager.GetGame(g.ID)
+_ = a.Store.UpdateGamePlayers(g.ID, res.PlayerA, res.PlayerB, gm.PlayerAColor, gm.PlayerBColor)
+<span class="cm">// … build msgA / msgB with each player's color …</span>
+_ = a.Hub.SendToLobby(res.PlayerA, msgA)            <span class="cm">// Alice: lobby line</span>
+_ = a.Hub.SendToLobby(res.PlayerB, msgB)
+writeJSON(w, http.StatusOK, map[string]interface{}{  <span class="cm">// Bob: the HTTP reply</span>
+    "Status": "matched", "gameId": g.ID, "playerColor": gm.PlayerBColor,
+})</code></pre>
+      <ul>
+        <li>The lock makes "check the line and take someone out" one step, so two people joining at the same instant can't both grab Alice.</li>
+        <li>The <code>_ =</code> means errors are ignored here. If a lobby line is down, the Hub stores the message as pending instead (tour 6).</li>
+      </ul>
+
+      <h3 id="l9-ws">4 · Opening a phone line</h3>
+      <p class="file">backend/internal/ws/handler.go · ServeWS, shortened</p>
+<pre><code>claims, err := auth.TokenFromRequest(r)   <span class="cm">// wristband checked BEFORE upgrading</span>
+if err != nil { http.Error(w, "unauthorized", http.StatusUnauthorized); return }
+playerID := claims.UserID
+
+conn, err := upgrader.Upgrade(w, r, nil)  <span class="cm">// HTTP becomes a WebSocket here</span>
+conn.SetReadLimit(1024)
+
+var initMsg Message
+if err := conn.ReadJSON(&amp;initMsg); err != nil || initMsg.Type != "auth" {
+    _ = conn.Close(); return
+}
+<span class="cm">// … read payload.GameID, set up ping/pong deadlines, start pingLoop …</span>
+if payload.GameID == "" {
+    serveLobby(h, conn, playerID)
+    return
+}
+serveGame(h, conn, st, manager, playerID, payload.GameID)</code></pre>
+      <ul>
+        <li><code>upgrader.CheckOrigin</code> only accepts connections whose <code>Origin</code> header equals <code>ALLOWED_ORIGIN</code>, so other websites can't open a line using your cookie.</li>
+        <li>A game ID in the first message decides lobby versus game.</li>
+        <li><code>pingLoop</code> pings every 45 seconds. If no pong arrives within 70 seconds, the read times out and the line closes.</li>
+      </ul>
+
+      <h3 id="l9-move">5 · A move arriving at the server</h3>
+      <p class="file">backend/internal/ws/handler.go · inside serveGame</p>
+<pre><code>if msg.Type == "move" {
+    var movePayload MovePayload
+    if err := json.Unmarshal(msg.Payload, &amp;movePayload); err != nil { continue }
+
+    color, ok := playerColor(manager, st, msg.GameID, playerID)
+    if !ok { continue }                                   <span class="cm">// not in this game</span>
+    if !isPlayersTurn(st.GetTurn(msg.GameID), color) { continue }
+    if _, err := st.ApplyMove(msg.GameID, movePayload.Move, playerID); err != nil {
+        continue                                          <span class="cm">// illegal move</span>
+    }
+    opponentID, ok := opponentOf(manager, st, msg.GameID, playerID)
+    if !ok { continue }
+    h.SendToGame(opponentID, msg.GameID, msg)             <span class="cm">// forward as is</span>
+
+    if outcome := st.Outcome(msg.GameID); outcome != "" {
+        broadcastGameOver(h, msg.GameID, outcome, playerID, opponentID)
+    }
+}</code></pre>
+      <ul>
+        <li>The three referee checks from Layer 4 are the three <code>continue</code> lines. Each one silently drops the move (<a href="#l10-silent">Layer 10</a>).</li>
+        <li><code>st.ApplyMove</code> does the legality check (through <code>game.Session</code> and notnil/chess) and saves to Neon in one call.</li>
+        <li><code>playerColor</code> and <code>opponentOf</code> try the in-memory <code>GameManager</code> first, then fall back to the store after a restart.</li>
+      </ul>
+
+      <h3 id="l9-hub">6 · The switchboard</h3>
+      <p class="file">backend/internal/ws/hub.go</p>
+<pre><code>func (h *Hub) register(key string, conn *websocket.Conn) {
+    h.mu.Lock()
+    defer h.mu.Unlock()
+    if old, ok := h.clients[key]; ok {
+        _ = old.Close()                    <span class="cm">// same key again: kick the old line</span>
+    }
+    h.clients[key] = conn
+    if msg, ok := h.pending[key]; ok {     <span class="cm">// anything waiting for you?</span>
+        _ = conn.WriteJSON(msg)
+        delete(h.pending, key)
+    }
+}
+
+func (h *Hub) sendTo(key string, msg Message) error {
+    h.mu.Lock()
+    conn, ok := h.clients[key]
+    h.mu.Unlock()
+    if ok {
+        if err := conn.WriteJSON(msg); err != nil {   <span class="cm">// write happens outside the lock</span>
+            <span class="cm">// … forget the conn, keep msg as pending …</span>
+        }
+        return nil
+    }
+    h.mu.Lock()
+    h.pending[key] = msg                   <span class="cm">// not connected: keep it for later</span>
+    h.mu.Unlock()
+    return errors.New("no-conn, stored pending")
+}</code></pre>
+      <ul>
+        <li>Keys are <code>playerID</code> for the lobby and <code>playerID:gameID</code> for a game line.</li>
+        <li>Each key holds only one pending message. A second one overwrites the first.</li>
+        <li>Writing outside the lock is the root of a rough edge (<a href="#l10-writers">Layer 10</a>).</li>
+      </ul>
+
+      <h3 id="l9-rebuild">7 · Rebuilding a game after a restart</h3>
+      <p class="file">backend/internal/store/postgres.go · getOrLoadSession, shortened</p>
+<pre><code>s.mu.RLock()
+sess, ok := s.sessions[gameID]
+s.mu.RUnlock()
+if ok {
+    return sess, nil                        <span class="cm">// already in memory: fast path</span>
+}
+<span class="cm">// … check the game exists in Postgres …</span>
+rows, err := s.db.Query(context.Background(), `SELECT san FROM moves WHERE game_id=$1 ORDER BY ply`, gameID)
+rebuilt := game.NewSession()
+for rows.Next() {
+    var san string
+    rows.Scan(&amp;san)
+    rebuilt.ApplyMove(san, "")              <span class="cm">// replay the scoresheet</span>
+}
+s.mu.Lock()
+if existing, ok := s.sessions[gameID]; ok {
+    rebuilt = existing                      <span class="cm">// someone else rebuilt it first: use theirs</span>
+} else {
+    s.sessions[gameID] = rebuilt
+}
+s.mu.Unlock()</code></pre>
+      <ul>
+        <li>Every <code>PostgresStore</code> method that needs a board starts with this, so rebuilding happens on first use.</li>
+        <li>The second check under the write lock handles two requests for the same game arriving at once after a restart.</li>
+      </ul>
+
+      <h3 id="l9-reconnect">8 · The reconnecting socket</h3>
+      <p class="file">frontend/src/lib/reconnectingWebSocket.ts</p>
+<pre><code>this.socket.onopen = () =&gt; {
+  const wasReconnect = this.hasConnectedBefore;
+  this.hasConnectedBefore = true;
+  this.attempt = 0;                       <span class="cm">// reset the backoff</span>
+  this.onOpen(wasReconnect);
+};
+this.socket.onclose = () =&gt; {
+  if (this.intentionallyClosed) { this.onClose(); return; }
+  this.scheduleReconnect();
+};
+
+private scheduleReconnect() {
+  const delay = Math.min(this.initialBackoffMs * Math.pow(2, this.attempt), this.maxBackoffMs);
+  this.attempt++;                         <span class="cm">// 500, 1000, 2000, 4000 … capped at 30000</span>
+  this.reconnectTimer = window.setTimeout(() =&gt; this.connect(), delay);
+}</code></pre>
+      <ul>
+        <li><code>close()</code> sets <code>intentionallyClosed</code>, so leaving a page doesn't trigger reconnect attempts.</li>
+        <li>Messages sent while the line is down are dropped with a warning, not queued.</li>
+      </ul>
+
+      <h3 id="l9-resync">9 · Catching up on the game page</h3>
+      <p class="file">frontend/src/components/Play.tsx</p>
+<pre><code>const resync = async () =&gt; {
+  const res = await api.get(`/games/${gameId}`);
+  const serverMoves = res.data.moves ?? [];
+  const localCount = game.history().length;
+  for (let i = localCount; i &lt; serverMoves.length; i++) {
+    move(serverMoves[i].from, serverMoves[i].to);   <span class="cm">// apply only the missing ones</span>
+  }
+  if (res.data.status === "finished") setGameOver("finished");
+};
+
+const ws = new ReconnectingWebSocket(wsUrl("/api/ws"), {
+  onOpen: () =&gt; {
+    ws.send(JSON.stringify({ type: "auth", payload: { gameId } }));
+    resync();                                       <span class="cm">// on first connect AND every reconnect</span>
+  },
+  <span class="cm">// … onMessage: "move" → move(…), "game_over" → overlay …</span>
+});</code></pre>
+      <ul>
+        <li>Starting the loop at <code>localCount</code> makes it safe to run as often as you like.</li>
+        <li>Notice <code>move()</code> gets no promotion piece here, so it falls back to a queen (<a href="#l10-promo">Layer 10</a>).</li>
+      </ul>
+
+      <div class="short">
+        <span class="tag">The short version</span>
+        <p>Startup picks a store. Middleware attaches your ID. The queue pairs under a lock. The WebSocket handler checks the wristband, then routes lobby or game. A move passes three checks, gets saved, then forwarded. The Hub keeps lines and pending messages. Games rebuild from the moves table. The browser retries with backoff and resyncs every time it connects.</p>
+        <label class="read-check"><input type="checkbox" id="read-layer-9" value="layer-9" data-layer-check> I've read this layer</label>
+      </div>
+    </section>
+
+    <!-- ============================== LAYER 10 ============================== -->
+    <section class="layer" id="layer-10">
+      <div class="layer-head">
+        <div class="layer-meta"><span>Layer 10</span><span class="gauge" aria-label="depth 10 of 10"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i></span><span>deep</span></div>
+        <h2 class="layer-title">Rough edges</h2>
+        <p class="layer-intro">Things that aren't quite right yet, worst first. Every real project has a list like this. Each item says what happens, why, and how it could be fixed.</p>
+      </div>
+
+      <div class="edge" id="l10-ratelimit">
+        <h4>The login limiter may trust a header anyone can fake <span class="sev security">security · needs checking</span></h4>
+        <dl>
+          <dt>What happens</dt><dd>Possibly, someone could make unlimited password guesses by sending a different made-up <code>CF-Connecting-IP</code> header with each request.</dd>
+          <dt>Why</dt><dd><code>clientIP()</code> in <code>auth/ratelimit.go</code> trusts that header first. It was written for the Cloudflare tunnel, where Cloudflare always overwrites it with the real address. On Render it depends on what sits in front of the app. If Cloudflare is in front (your own Cloudflare proxy, or Render's edge if it uses Cloudflare), the header is still trustworthy. If not, it comes straight from whoever sent the request. And without the header, every request may appear to come from Render's own proxy, so all users would share one limit.</dd>
+          <dt>Check</dt><dd>Temporarily log <code>clientIP(r)</code>, then send a login request with a fake <code>CF-Connecting-IP: 1.2.3.4</code> header. If the log shows <code>1.2.3.4</code>, the hole is real.</dd>
+          <dt>Fix</dt><dd>Read the client address only from a header your host is guaranteed to set and overwrite.</dd>
+        </dl>
+      </div>
+
+      <div class="edge" id="l10-writers">
+        <h4>Two writers on one connection can break a line <span class="sev bug">bug · rare</span></h4>
+        <dl>
+          <dt>What happens</dt><dd>If two messages are written to the same WebSocket at the same instant (for example one player resigns exactly as the other moves), gorilla/websocket panics with "concurrent write to websocket connection". Go's HTTP server catches that panic, so the whole server keeps running, but that player's line drops and a message can be lost or garbled. The browser then reconnects and resyncs.</dd>
+          <dt>Why</dt><dd>The gorilla/websocket library allows only one writer per connection at a time. <code>Hub.sendTo</code> writes outside its lock, and each player's goroutine can write to the other's connection.</dd>
+          <dt>Fix</dt><dd>Give each connection one writer goroutine fed by a channel, or a small mutex per connection that every write takes.</dd>
+        </dl>
+      </div>
+
+      <div class="edge" id="l10-silent">
+        <h4>Rejected moves fail silently <span class="sev bug">bug</span></h4>
+        <dl>
+          <dt>What happens</dt><dd>If the server refuses a move, your board still shows it and your opponent never receives it. The two boards disagree until you refresh.</dd>
+          <dt>Why</dt><dd>Each check in <code>serveGame</code> just does <code>continue</code>. The browser already applied the move optimistically, and <code>resync()</code> only adds missing moves, it never removes extra ones.</dd>
+          <dt>Fix</dt><dd>Send a <code>move_rejected</code> message back and have the browser undo the move or reload the game.</dd>
+        </dl>
+      </div>
+
+      <div class="edge" id="l10-promo">
+        <h4>Under-promotions turn into queens after a reconnect <span class="sev bug">bug</span></h4>
+        <dl>
+          <dt>What happens</dt><dd>Promote to a knight, then refresh or reconnect: your board now shows a queen, while the server correctly has a knight.</dd>
+          <dt>Why</dt><dd><code>resync()</code> calls <code>move(from, to)</code> without the promotion piece, and <code>move()</code> defaults to <code>"q"</code>.</dd>
+          <dt>Fix</dt><dd>Use the fifth character of the stored <code>uci</code> (e.g. <code>e7e8n</code>), or apply the stored <code>san</code> directly.</dd>
+        </dl>
+      </div>
+
+      <div class="edge" id="l10-forward">
+        <h4>The move that's forwarded isn't the move that was checked <span class="sev bug">bug</span></h4>
+        <dl>
+          <dt>What happens</dt><dd>A tampered client could send SAN <code>e4</code> (which passes the check) with <code>from</code>/<code>to</code> of a different move. The opponent's board shows the wrong move.</dd>
+          <dt>Why</dt><dd>The server validates <code>payload.move</code> but forwards the original message, and the opponent's browser applies <code>from</code>/<code>to</code>.</dd>
+          <dt>Fix</dt><dd>Forward what the server actually applied: the <code>MoveRecord</code> returned by <code>ApplyMove</code> (from, to, uci).</dd>
+        </dl>
+      </div>
+
+      <div class="edge" id="l10-tabs">
+        <h4>Two tabs keep kicking each other off <span class="sev bug">bug</span></h4>
+        <dl>
+          <dt>What happens</dt><dd>Open the site in two tabs of the same browser: their lobby lines take turns disconnecting each other about every half second. The same happens with one game open in two tabs.</dd>
+          <dt>Why</dt><dd><code>Hub.register</code> closes any existing line with the same key. The kicked tab reconnects after 0.5 seconds and kicks the other one back.</dd>
+          <dt>Fix</dt><dd>Allow several lines per key (a list instead of one), or tell the old tab "replaced" with a special close code so it stops reconnecting.</dd>
+        </dl>
+      </div>
+
+      <div class="edge" id="l10-color">
+        <h4>Your color is only remembered in one browser <span class="sev bug">bug</span></h4>
+        <dl>
+          <dt>What happens</dt><dd>Open a game from another browser or device (or after clearing site data) and the board assumes you're white. If you're actually black, it faces the wrong way, lets you drag white's pieces, and the server rejects those moves.</dd>
+          <dt>Why</dt><dd><code>Play.tsx</code> reads the color from <code>localStorage</code> and defaults to white.</dd>
+          <dt>Fix</dt><dd>Work it out from <code>GET /games/:id</code>, which already includes both players' IDs and colors, the way <code>Replay.tsx</code> does.</dd>
+        </dl>
+      </div>
+
+      <div class="edge" id="l10-queue">
+        <h4>The waiting line never forgets you <span class="sev limit">limitation</span></h4>
+        <dl>
+          <dt>What happens</dt><dd>Press Play Now, then leave. You stay in line. When the next person joins, you're paired with them. If you're still on the site, you get pulled into a game. If you've left, they sit in a game alone.</dd>
+          <dt>Why</dt><dd><code>Queue.LeaveQueue</code> exists but nothing calls it.</dd>
+          <dt>Fix</dt><dd>Call it when the matchmaking page closes (a small leave endpoint) or when the lobby line disconnects.</dd>
+        </dl>
+      </div>
+
+      <div class="edge" id="l10-draw">
+        <h4>Your screen can say "draw" while the server keeps playing <span class="sev limit">limitation</span></h4>
+        <dl>
+          <dt>What happens</dt><dd>On a threefold repetition, the status line says "Draw by repetition", but no game-over message arrives and moves are still accepted.</dd>
+          <dt>Why</dt><dd>chess.js in the browser reports threefold repetition. The server's notnil/chess only ends a game by itself on automatic draws (such as fivefold repetition or insufficient material). Threefold is a draw a player has to claim.</dd>
+          <dt>Fix</dt><dd>Add a "claim draw" message the server can accept, or have the server treat threefold as final.</dd>
+        </dl>
+      </div>
+
+      <div class="edge" id="l10-tx">
+        <h4>Saving a move is two separate writes <span class="sev limit">limitation</span></h4>
+        <dl>
+          <dt>What happens</dt><dd>If the second write fails, the game's board snapshot and its move list disagree, and the in-memory board is already a move ahead.</dd>
+          <dt>Why</dt><dd><code>PostgresStore.ApplyMove</code> runs <code>UPDATE games</code> and then <code>INSERT INTO moves</code> without a transaction.</dd>
+          <dt>Fix</dt><dd>Wrap both in one transaction. On failure, drop the in-memory session so it's rebuilt from the database.</dd>
+        </dl>
+      </div>
+
+      <div class="edge" id="l10-small">
+        <h4>Smaller things <span class="sev tidy">tidy-up</span></h4>
+        <ul>
+          <li><strong>Only one pending message per player.</strong> A second message overwrites the first. Mostly harmless, because <code>resync()</code> recovers moves.</li>
+          <li><strong>Messages can name a different game than their line.</strong> <code>serveGame</code> uses the <code>gameId</code> inside each message rather than the one the line was opened for. You still have to be a player in that game, so it's untidy rather than dangerous.</li>
+          <li><strong>Undo, New Game and Flip Board on the game page.</strong> Undo and New Game change only your own board, putting it out of sync. Flip does nothing.</li>
+          <li><strong>Any database error reads as "not found".</strong> <code>GetGame</code> returns <code>ErrorNotFound</code> for every error, including a Neon hiccup while it wakes up.</li>
+          <li><strong><code>GET /games/:id</code> needs no login.</strong> Anyone with a game's ID can read it. IDs are random UUIDs, so they're hard to guess. Just make it a deliberate choice.</li>
+          <li><strong><code>POST /games/:id/move</code></strong> isn't used, doesn't notify the opponent, and returns 404 after a restart because it only checks the in-memory <code>GameManager</code>.</li>
+          <li><strong><code>initial_fen</code></strong> holds the current position. Rename it to <code>current_fen</code>.</li>
+          <li><strong>No automated tests yet.</strong> <code>matchmaking/queue.go</code> and <code>game/session.go</code> are the easiest place to start.</li>
+        </ul>
+      </div>
+
+      <div class="short">
+        <span class="tag">The short version</span>
+        <p>Check the rate limiter's IP source first (security), then fix the concurrent-write problem. After that, the sync bugs: silent rejections, promotions on resync, forwarding the checked move, tab fights and remembered color. The rest is housekeeping.</p>
+        <label class="read-check"><input type="checkbox" id="read-layer-10" value="layer-10" data-layer-check> I've read this layer</label>
+      </div>
+    </section>
+
+    <!-- ============================== EXTRAS ============================== -->
+    <section class="layer" id="where">
+      <div class="layer-head">
+        <div class="layer-meta"><span>Reference</span></div>
+        <h2 class="layer-title">Where do I look when…</h2>
+      </div>
+      <div class="tbl">
+        <table>
+          <thead><tr><th>Something's up with…</th><th>Look here</th></tr></thead>
+          <tbody>
+            <tr><td>Can't log in, or keep getting logged out</td><td><code>auth/handler.go</code>, <code>auth/jwt.go</code> (24-hour expiry, <code>COOKIE_SECURE</code>), <code>context/AuthContext.tsx</code></td></tr>
+            <tr><td>"Too many requests"</td><td><code>auth/ratelimit.go</code></td></tr>
+            <tr><td>Stuck on "Waiting for other players"</td><td><code>matchmaking/queue.go</code>, <code>handlers/api.go</code> (JoinMatchMaking), <code>context/WSContext.tsx</code>, <code>ws/hub.go</code> (pending)</td></tr>
+            <tr><td>Board faces the wrong way</td><td><code>localStorage</code> key <code>color_&lt;gameId&gt;</code>, <code>components/Play.tsx</code></td></tr>
+            <tr><td>A move doesn't reach the opponent</td><td><code>Play.tsx</code> (sendMove), <code>ws/handler.go</code> (serveGame checks), <code>ws/hub.go</code> (sendTo)</td></tr>
+            <tr><td>Boards out of sync after a reconnect</td><td><code>Play.tsx</code> (resync), <code>lib/reconnectingWebSocket.ts</code></td></tr>
+            <tr><td>Game didn't come back after a restart</td><td><code>store/postgres.go</code> (getOrLoadSession), Neon dashboard</td></tr>
+            <tr><td>Live moves don't work in production</td><td><code>ALLOWED_ORIGIN</code> on Render, <code>ws/handler.go</code> (CheckOrigin), <code>lib/wsUrl.ts</code></td></tr>
+            <tr><td>Site is slow to open</td><td>Render free-plan cold start (<a href="#l8-free">Layer 8</a>)</td></tr>
+            <tr><td>Server won't start on Render</td><td>Render logs. Check <code>JWT_SECRET</code> length and <code>DATABASE_URL</code>.</td></tr>
+            <tr><td>Changing the database</td><td>Add <code>backend/internal/db/migrations/004_….sql</code>. It runs once on the next start.</td></tr>
+            <tr><td>Adding a new WebSocket message</td><td><code>ws/handler.go</code> (serveGame) and <code>Play.tsx</code> (onMessage)</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="layer" id="glossary">
+      <div class="layer-head">
+        <div class="layer-meta"><span>Reference</span></div>
+        <h2 class="layer-title">Glossary</h2>
+      </div>
+      <dl class="gloss">
+        <dt id="g-axios" class="target-flash">axios</dt><dd>A JavaScript library for making HTTP requests. The app uses one shared instance called <code>api</code>.</dd>
+        <dt id="g-backoff" class="target-flash">Exponential backoff</dt><dd>Retrying with a wait that doubles each time (0.5s, 1s, 2s…), usually with a cap.</dd>
+        <dt id="g-bcrypt" class="target-flash">bcrypt</dt><dd>A deliberately slow way to scramble passwords so stolen hashes are hard to crack. You can check a password against it, but you can't unscramble it.</dd>
+        <dt id="g-caddy" class="target-flash">Caddy</dt><dd>A web server often used to route traffic. Your repo has a <code>Caddyfile</code> from the self-hosting attempt. It isn't used on Render.</dd>
+        <dt id="g-chessground" class="target-flash">chessground</dt><dd>The board UI library from lichess. It handles drawing and dragging, but not the rules.</dd>
+        <dt id="g-chessjs" class="target-flash">chess.js</dt><dd>A JavaScript chess rules library used in the browser for legal moves and game status.</dd>
+        <dt id="g-container" class="target-flash">Container</dt><dd>A packaged, isolated environment holding a program and everything it needs. Render runs yours.</dd>
+        <dt id="g-context" class="target-flash">Context (React)</dt><dd>A way to share values (like the logged-in user) with every component below a provider.</dd>
+        <dt id="g-cookie" class="target-flash">Cookie</dt><dd>A small value the browser stores and sends back automatically. <em>HttpOnly</em> means scripts can't read it. <em>Secure</em> means it's only sent over HTTPS. <em>SameSite=Lax</em> limits sending it from other sites.</dd>
+        <dt id="g-cors" class="target-flash">CORS</dt><dd>Browser rules about one website calling another website's API. Mostly irrelevant here, because everything is on one domain.</dd>
+        <dt id="g-docker" class="target-flash">Docker / Dockerfile</dt><dd>A tool and a recipe file for building container images.</dd>
+        <dt id="g-fen" class="target-flash">FEN</dt><dd>Forsyth–Edwards Notation: a one-line description of a chess position.</dd>
+        <dt id="g-frontend" class="target-flash">Frontend / backend</dt><dd>The frontend is the part that runs in your browser. The backend is the part that runs on the server.</dd>
+        <dt id="g-goroutine" class="target-flash">Goroutine</dt><dd>Go's lightweight thread. The server runs one per connection, so many games happen at once.</dd>
+        <dt id="g-hook" class="target-flash">Hook (React)</dt><dd>A function starting with <code>use</code> that gives a component state or behavior, like <code>useChessGame</code>.</dd>
+        <dt id="g-http" class="target-flash">HTTP</dt><dd>The request-and-reply protocol of the web. One request, one response.</dd>
+        <dt id="g-interface" class="target-flash">Interface (Go)</dt><dd>A list of methods. Any type that has those methods fits, which is how <code>MemoryStore</code> and <code>PostgresStore</code> are interchangeable.</dd>
+        <dt id="g-jwt" class="target-flash">JWT</dt><dd>JSON Web Token: a small signed piece of data ("user X, valid until Y"). The server can verify it without a database lookup.</dd>
+        <dt id="g-migration" class="target-flash">Migration</dt><dd>A numbered SQL file that changes the database structure. Each one runs exactly once.</dd>
+        <dt id="g-mutex" class="target-flash">Mutex</dt><dd>A lock that lets only one goroutine at a time touch some shared data.</dd>
+        <dt id="g-neon" class="target-flash">Neon</dt><dd>A hosted Postgres service. Your database lives there.</dd>
+        <dt id="g-notnil" class="target-flash">notnil/chess</dt><dd>The Go chess library the server uses as referee.</dd>
+        <dt id="g-postgres" class="target-flash">Postgres</dt><dd>PostgreSQL, a popular SQL database.</dd>
+        <dt id="g-react" class="target-flash">React</dt><dd>A JavaScript library for building user interfaces from components.</dd>
+        <dt id="g-render" class="target-flash">Render</dt><dd>The hosting service that builds and runs your container at your domain.</dd>
+        <dt id="g-san" class="target-flash">SAN</dt><dd>Standard Algebraic Notation, how people write moves: <code>e4</code>, <code>Nf3</code>, <code>O-O</code>.</dd>
+        <dt id="g-spa" class="target-flash">SPA</dt><dd>Single-page app: one HTML page where JavaScript swaps the content as you navigate, instead of loading new pages.</dd>
+        <dt id="g-uci" class="target-flash">UCI notation</dt><dd>Moves written as from-square plus to-square: <code>e2e4</code>, <code>e7e8q</code>.</dd>
+        <dt id="g-vite" class="target-flash">Vite</dt><dd>The frontend build tool and dev server.</dd>
+        <dt id="g-websocket" class="target-flash">WebSocket</dt><dd>A connection that stays open so both sides can send messages at any time.</dd>
+      </dl>
+    </section>
+
+    <section class="layer" id="roadmap">
+      <div class="layer-head">
+        <div class="layer-meta"><span>Reference</span></div>
+        <h2 class="layer-title">Using this with the roadmap</h2>
+      </div>
+      <p>The repo also has <code>docs/ROADMAP.md</code>, a hands-on study plan with exercises. This guide explains, and the roadmap has you try things. Here's how they line up:</p>
+      <div class="tbl">
+        <table>
+          <thead><tr><th>Roadmap stage</th><th>Read in this guide</th></tr></thead>
+          <tbody>
+            <tr><td>0 · Big picture</td><td>Layers 0–3</td></tr>
+            <tr><td>1 · Backend entry point</td><td>Layer 5, tour 1 in Layer 9</td></tr>
+            <tr><td>2 · Authentication</td><td>Layer 3 (wristband), Layer 4 (login), tour 2</td></tr>
+            <tr><td>3 · Data layer</td><td>Layer 5 (memory vs database), Layer 7, tour 7</td></tr>
+            <tr><td>4 · Chess engine wrapper</td><td>Layer 5 (<code>game</code>), Layer 7 (notation)</td></tr>
+            <tr><td>5 · Matchmaking</td><td>Layer 4 (finding a match), tour 3</td></tr>
+            <tr><td>6 · WebSockets on the server</td><td>Layer 4 (a move), tours 4–6</td></tr>
+            <tr><td>7 · The game page</td><td>Layer 6, tours 8–9</td></tr>
+            <tr><td>8 · History &amp; replay</td><td>Layer 4 (replay), Layer 6 (pages)</td></tr>
+            <tr><td>9 · Deployment</td><td>Layer 8</td></tr>
+            <tr><td>10 · Capstone</td><td>Layer 10: pick a rough edge and fix it</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <footer class="end">Written from the code on branch <code>claude/sleepy-johnson-8hetzm</code> (latest app code: commit <code>a63f7d6</code>). If the code changes, this guide can be regenerated from <code>docs/guide/how-chess-arena-works.html</code>.</footer>
+    </section>
+  </main>
+</div>
+
+<script>
+(function () {
+  var KEY = "chess-arena-guide:read";
+  var TOTAL = 11;
+  var read = new Set();
+  try { read = new Set(JSON.parse(localStorage.getItem(KEY) || "[]")); } catch (e) { read = new Set(); }
+  function save() { try { localStorage.setItem(KEY, JSON.stringify(Array.from(read))); } catch (e) {} }
+  function render() {
+    document.querySelectorAll("[data-layer-check]").forEach(function (cb) { cb.checked = read.has(cb.value); });
+    document.querySelectorAll("[data-toc]").forEach(function (a) { a.classList.toggle("is-read", read.has(a.dataset.toc)); });
+    document.querySelectorAll("[data-progress]").forEach(function (el) { el.textContent = read.size + " of " + TOTAL + " layers read"; });
+  }
+  document.addEventListener("change", function (e) {
+    var cb = e.target.closest && e.target.closest("[data-layer-check]");
+    if (!cb) return;
+    if (cb.checked) read.add(cb.value); else read.delete(cb.value);
+    save(); render();
+  });
+  render();
+
+  var sideLinks = {};
+  document.querySelectorAll(".toc-side [data-toc]").forEach(function (a) { sideLinks[a.dataset.toc] = a; });
+  if ("IntersectionObserver" in window) {
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (en) {
+        if (!en.isIntersecting) return;
+        var a = sideLinks[en.target.id];
+        if (!a) return;
+        Object.keys(sideLinks).forEach(function (k) { sideLinks[k].classList.remove("is-here"); });
+        a.classList.add("is-here");
+      });
+    }, { rootMargin: "-15% 0px -75% 0px" });
+    document.querySelectorAll("section.layer[id^='layer-']").forEach(function (s) { io.observe(s); });
+  }
+  document.querySelectorAll(".toc-mobile a").forEach(function (a) {
+    a.addEventListener("click", function () { var d = a.closest("details"); if (d) d.open = false; });
+  });
+})();
+</script>
