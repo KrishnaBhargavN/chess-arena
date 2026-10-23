@@ -436,18 +436,24 @@ footer.end { margin-top: 64px; padding-top: 18px; border-top: 1px solid var(--li
         </table>
       </div>
 
-      <p>One detail makes your setup simpler than most: <strong>on Render, the browser app and the server live in the same box.</strong> The server hands out the website's files as well as answering requests. So there's one thing to deploy, one address, and no separate frontend host.</p>
+      <p>One detail makes your setup simpler than most: <strong>on Render, the browser app and the server live in the same box.</strong> The Go server has two jobs. First it hands out the website's files, then it answers the API calls that the website makes. So there's one thing to deploy, one address, and no separate frontend host.</p>
+      <p>Opening the site happens in two steps:</p>
+      <ol class="steps">
+        <li><strong>Getting the app.</strong> Your browser asks for <code>chess.bhargavnkrishna.site</code>. The Go server reads the built React files (<code>index.html</code>, plus the JavaScript and CSS) from <code>frontend/dist</code> and sends them. At this point no API call has happened. The browser is just downloading the app.</li>
+        <li><strong>Using the app.</strong> The React app now runs in your browser and starts talking to the same Go server: API calls to <code>/api/…</code>, and the WebSocket at <code>/api/ws</code>.</li>
+      </ol>
+      <p>On your laptop it's different. There, the Vite dev server hands out the React files, and the Go server <em>only</em> answers <code>/api</code>. If that's the picture you had in mind, it's right for local development but not for the live site. <a href="#l8-local">Layer 8</a> compares the two side by side.</p>
 
       <figure>
         <div class="figbox">
-          <svg class="dg" viewBox="0 0 690 280" role="img" aria-label="Your browser talks to one Render container over HTTP and WebSocket. Inside, the Go server answers requests and hands out the website files. The Go server reads and writes the Neon Postgres database.">
+          <svg class="dg" viewBox="0 0 690 280" role="img" aria-label="Step 1: the Go server reads the built React files from frontend/dist and sends them to your browser. Step 2: the React app in your browser makes API calls and opens a WebSocket to the same Go server. The Go server reads and writes the Neon Postgres database.">
             <defs>
               <marker id="m2" viewBox="0 0 10 10" refX="9" refY="5" markerUnits="userSpaceOnUse" markerWidth="9" markerHeight="9" orient="auto-start-reverse"><path d="M0,0L10,5L0,10z" class="ah"/></marker>
             </defs>
-            <rect class="b" x="20" y="80" width="150" height="160" rx="6"/>
-            <text x="95" y="150" text-anchor="middle" class="t">Your browser</text>
-            <text x="95" y="170" text-anchor="middle" class="s">the React app</text>
-            <text x="95" y="186" text-anchor="middle" class="s">runs here</text>
+            <rect class="b" x="20" y="80" width="130" height="160" rx="6"/>
+            <text x="85" y="150" text-anchor="middle" class="t">Your browser</text>
+            <text x="85" y="170" text-anchor="middle" class="s">the React app</text>
+            <text x="85" y="186" text-anchor="middle" class="s">runs here</text>
             <rect class="grp" x="240" y="30" width="270" height="230" rx="10"/>
             <text x="254" y="52" class="s">Render · chess.bhargavnkrishna.site</text>
             <rect class="bx" x="260" y="70" width="230" height="80" rx="6"/>
@@ -456,11 +462,12 @@ footer.end { margin-top: 64px; padding-top: 18px; border-top: 1px solid var(--li
             <rect class="b" x="260" y="180" width="230" height="60" rx="6"/>
             <text x="375" y="206" text-anchor="middle" class="t">Website files</text>
             <text x="375" y="224" text-anchor="middle" class="s m">frontend/dist</text>
-            <line class="ln" x1="174" y1="110" x2="256" y2="110" marker-start="url(#m2)" marker-end="url(#m2)"/>
-            <text x="215" y="100" text-anchor="middle" class="s">HTTP</text>
-            <text x="215" y="128" text-anchor="middle" class="s">WebSocket</text>
+            <line class="ln" x1="256" y1="98" x2="154" y2="98" marker-end="url(#m2)"/>
+            <text x="195" y="90" text-anchor="middle" class="s">1 · page files</text>
+            <line class="ln" x1="154" y1="128" x2="256" y2="128" marker-start="url(#m2)" marker-end="url(#m2)"/>
+            <text x="195" y="146" text-anchor="middle" class="s">2 · API calls</text>
             <line class="ln" x1="375" y1="150" x2="375" y2="177" marker-end="url(#m2)"/>
-            <text x="385" y="168" class="s">reads files</text>
+            <text x="385" y="168" class="s">1 · reads files</text>
             <rect class="b" x="560" y="70" width="115" height="80" rx="6"/>
             <text x="617" y="104" text-anchor="middle" class="t">Neon</text>
             <text x="617" y="124" text-anchor="middle" class="s">Postgres</text>
@@ -468,7 +475,7 @@ footer.end { margin-top: 64px; padding-top: 18px; border-top: 1px solid var(--li
             <text x="525" y="100" text-anchor="middle" class="s">SQL</text>
           </svg>
         </div>
-        <figcaption>Your browser only ever talks to one place: the Render container at your domain. Only the Go server talks to the database.</figcaption>
+        <figcaption>Step 1: the Go server reads the React files from <code>frontend/dist</code> and sends them to your browser. Step 2: the React app, now running in your browser, makes API calls and opens the WebSocket to that same Go server. Only the Go server talks to the database.</figcaption>
       </figure>
 
       <h3>Who's responsible for what</h3>
@@ -1150,7 +1157,7 @@ footer.end { margin-top: 64px; padding-top: 18px; border-top: 1px solid var(--li
         <li><code>/healthz</code> pings the database too, so it tells you whether both are awake and connected.</li>
       </ul>
 
-      <h3>Local development versus live</h3>
+      <h3 id="l8-local">Local development versus live</h3>
       <div class="tbl">
         <table>
           <thead><tr><th></th><th>On your laptop (<code>./dev.sh</code>)</th><th>Live on Render</th></tr></thead>
